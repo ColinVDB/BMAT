@@ -19,14 +19,17 @@ This software is written entirely in Python and thus required Python to be insta
 ##### Linux
 
 [Install Python on Linux](https://www.scaler.com/topics/python/install-python-on-linux/)
+
 This link describe extensively how to install python on Linux. 
 
 The easiest solution to install Python is to use the Package Manager. For this, open a terminal a type the following command: 
+
 """
 sudo apt-get install python
 """
 
 After the installation, you can verify that it all worked properly by typing:
+
 """
 python -V
 """
@@ -34,6 +37,7 @@ python -V
 This command should show you the vesion of Python. 
 
 Then, you can check if pip has been installed by typing:
+
 """
 pip -V
 """
@@ -48,13 +52,17 @@ This will install pip, you can check that pip is well installed by checking its 
 ##### Windows
 
 The first possibility is to download Python via the microsoft store. This should download and install Python and Pip on your computer. To check if the installation has worked, you can open a command prompt or powershell and type:
+
 """
 python -V 
 """
+
 to see the version of python and 
+
 """
 pip -V
 """
+
 to see the verison of pip.
 
 If there is no error, it is okay. 
@@ -63,10 +71,13 @@ The second possibility is to download the installation package directly on the [
 1. Download [get-pip.py](https://bootstrap.pypa.io/get-pip.py) script to a folder on your computer. 
 2. Open a command prompt in that folder or navigate to that folder
 3. Run the script with the following command:
+
 """
 python get-pip.py
 """
+
 This should install pip. You can check that the installation worked by typing:
+
 """
 pip -V
 """
@@ -77,10 +88,13 @@ Download the installation package directly on the [Python Website](https://www.p
 1. Download [get-pip.py](https://bootstrap.pypa.io/get-pip.py) script to a folder on your computer. 
 2. Open a command prompt in that folder or navigate to that folder
 3. Run the script with the following command:
+
 """
 python get-pip.py
 """
+
 This should install pip. You can check that the installation worked by typing:
+
 """
 pip -V
 """
