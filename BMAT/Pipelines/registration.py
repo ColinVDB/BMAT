@@ -813,8 +813,10 @@ class RegistrationWorker(QObject):
                         print('bruh!')
                         # subprocess.Popen(f'$ANTs_registration -d 3 -n 4 -f {ref_image} -m {image_to_register} -t r -o {registered_image}',shell=True).wait()
 
-                        subprocess.Popen(f'$ANTs_registration -d 3 -n 4 -f {path_to_ref_image}/{ref_image} -m {path_to_image_to_register}/{image_to_register} -t r -o {path_to_registered_image}/{registered_image}', shell=True).wait()
-
+                        # subprocess.Popen(f'$ANTs_registration -d 3 -n 4 -f {path_to_ref_image}/{ref_image} -m {path_to_image_to_register}/{image_to_register} -t r -o {path_to_registered_image}/{registered_image}', shell=True).wait()
+                        
+                        subprocess.Popen(f'docker run --rm --privileged -v {path_to_ref_image}:/media/path_to_ref_image -v {path_to_image_to_register}:/media/path_to_image_to_register -v {path_to_registered_image}:/media/path_to_registered_image colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && \$ANTs_registration -d 3 -n 4 -f /media/path_to_ref_image/{ref_image} -m /media/path_to_image_to_register/{image_to_register} -t r -o /media/path_to_registered_image/{registered_image}"', shell=True).wait()
+                        
                         # self.client.containers.run('antsx/ants', auto_remove=True, volumes=[f'{path_to_image_to_register}:/data', f'{path_to_ref_image}:/media', f'{path_to_registered_image}:/home'], command=f'/opt/ants/bin/antsRegistrationSyNQuick.sh -d 3 -n 4 -f /media/{ref_image} -m /data/{image_to_register} -t r -o /home/{registered_image}')
                         # subprocess.Popen(f'rm {registered_image}InverseWarped.nii.gz',shell=True).wait()
                         os.remove(f'{pjoin(path_to_registered_image, registered_image)}InverseWarped.nii.gz')
@@ -834,7 +836,9 @@ class RegistrationWorker(QObject):
                                 if pexists(pjoin(path_to_trans_image_to_register, trans_image_to_register)):
                                     # subprocess.Popen('${ANTSPATH}/antsApplyTransforms -d 3 -i {trans_image_to_register} -r {ref_image} -t {registered_image}0GenericAffine.mat -n nearestNeighbor -o {trans_registered_image}.nii.gz',shell=True).wait()
 
-                                    subprocess.Popen(f'$ANTs_applyTransforms -d 3 -i {path_to_trans_image_to_register}/{trans_image_to_register} -r {path_to_ref_image}/{ref_image} -t {path_to_trans_registered_image}/{registered_image}0GenericAffine.mat -n nearestNeighbor -o {path_to_trans_registered_image}/{trans_registered_image}.nii.gz', shell=True).wait()
+                                    # subprocess.Popen(f'$ANTs_applyTransforms -d 3 -i {path_to_trans_image_to_register}/{trans_image_to_register} -r {path_to_ref_image}/{ref_image} -t {path_to_trans_registered_image}/{registered_image}0GenericAffine.mat -n nearestNeighbor -o {path_to_trans_registered_image}/{trans_registered_image}.nii.gz', shell=True).wait()
+
+                                    subprocess.Popen(f'docker run --rm --privileged -v {path_to_trans_image_to_register}:/media/path_to_trans_image_to_register -v {path_to_ref_image}:/media/path_to_ref_image -v {path_to_trans_registered_image}:/media/path_to_trans_registered_image colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && \$ANTs_applyTransforms -d 3 -i /media/path_to_trans_image_to_register/{trans_image_to_register} -r /media/path_to_ref_image/{ref_image} -t /media/path_to_trans_registered_image/{registered_image}0GenericAffine.mat -n nearestNeighbor -o /media/path_to_trans_registered_image/{trans_registered_image}.nii.gz"', shell=True).wait()
 
                                     # self.client.containers.run('antsx/ants', auto_remove=True, volumes=[f'{path_to_trans_image_to_register}:/data', f'{path_to_ref_image}:/media', f'{path_to_trans_registered_image}:/home'], command=f'/opt/ants/bin/antsApplyTransforms -d 3 -i /data/{trans_image_to_register} -r /media/{ref_image} -t /home/{registered_image}0GenericAffine.mat -n nearestNeighbor -o /home/{trans_registered_image}.nii.gz')
 
@@ -851,7 +855,9 @@ class RegistrationWorker(QObject):
 
                         # subprocess.Popen(f'$ANTs_registration -d 3 -n 4 -f {ref_image} -m {image_to_register} -t r -o {registered_image}',shell=True).wait()
 
-                        subprocess.Popen(f'$ANTs_registration -d 3 -n 4 -f {path_to_ref_image}/{ref_image} -m {path_to_image_to_register}/{image_to_register} -t r -o {path_to_registered_image}/{registered_image}', shell=True).wait()
+                        # subprocess.Popen(f'$ANTs_registration -d 3 -n 4 -f {path_to_ref_image}/{ref_image} -m {path_to_image_to_register}/{image_to_register} -t r -o {path_to_registered_image}/{registered_image}', shell=True).wait()
+
+                        subprocess.Popen(f'docker run --rm --privileged -v {path_to_ref_image}:/media/path_to_ref_image -v {path_to_image_to_register}:/media/path_to_image_to_register -v {path_to_registered_image}:/media/path_to_registered_image colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && \$ANTs_registration -d 3 -n 4 -f /media/path_to_ref_image/{ref_image} -m /media/path_to_image_to_register/{image_to_register} -t r -o /media/path_to_registered_image/{registered_image}"', shell=True).wait()
 
                         # self.client.containers.run('antsx/ants', auto_remove=True, volumes=[f'{path_to_image_to_register}:/data', f'{path_to_ref_image}:/media', f'{path_to_registered_image}:/home'], command=f'/opt/ants/bin/antsRegistrationSyNQuick.sh -d 3 -n 4 -f /media/{ref_image} -m /data/{image_to_register} -t r -o /home/{registered_image}')
                         # subprocess.Popen(f'rm {registered_image}InverseWarped.nii.gz',shell=True).wait()
@@ -872,7 +878,9 @@ class RegistrationWorker(QObject):
                                 if pexists(pjoin(path_to_trans_image_to_register, trans_image_to_register)):
                                     # subprocess.Popen('${ANTSPATH}/antsApplyTransforms -d 3 -i {trans_image_to_register} -r {ref_image} -t {registered_image}0GenericAffine.mat -n nearestNeighbor -o {trans_registered_image}.nii.gz',shell=True).wait()
 
-                                    subprocess.Popen(f'$ANTs_applyTransforms -d 3 -i {path_to_trans_image_to_register}/{trans_image_to_register} -r {path_to_ref_image}/{ref_image} -t {path_to_trans_registered_image}/{registered_image}0GenericAffine.mat -n nearestNeighbor -o {path_to_trans_registered_image}/{trans_registered_image}.nii.gz', shell=True).wait()
+                                    # subprocess.Popen(f'$ANTs_applyTransforms -d 3 -i {path_to_trans_image_to_register}/{trans_image_to_register} -r {path_to_ref_image}/{ref_image} -t {path_to_trans_registered_image}/{registered_image}0GenericAffine.mat -n nearestNeighbor -o {path_to_trans_registered_image}/{trans_registered_image}.nii.gz', shell=True).wait()
+                                    
+                                    subprocess.Popen(f'docker run --rm --privileged -v {path_to_trans_image_to_register}:/media/path_to_trans_image_to_register -v {path_to_ref_image}:/media/path_to_ref_image -v {path_to_trans_registered_image}:/media/path_to_trans_registered_image colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && \$ANTs_applyTransforms -d 3 -i /media/path_to_trans_image_to_register/{trans_image_to_register} -r /media/path_to_ref_image/{ref_image} -t /media/path_to_trans_registered_image/{registered_image}0GenericAffine.mat -n nearestNeighbor -o /media/path_to_trans_registered_image/{trans_registered_image}.nii.gz', shell=True).wait()
 
                                     # self.client.containers.run('antsx/ants', auto_remove=True, volumes=[f'{path_to_trans_image_to_register}:/data', f'{path_to_ref_image}:/media', f'{path_to_trans_registered_image}:/home'], command=f'/opt/ants/bin/antsApplyTransforms -d 3 -i /data/{trans_image_to_register} -r /media/{ref_image} -t /home/{registered_image}0GenericAffine.mat -n nearestNeighbor -o /home/{trans_registered_image}.nii.gz')
 
@@ -952,7 +960,9 @@ class TransformationWorker(QObject):
 
                         # subprocess.Popen('${ANTSPATH}/antsApplyTransforms -d 3 -i {image_to_register} -r {ref_image} -t {transformation_matrix} -n nearestNeighbor -o {registered_image}.nii.gz',shell=True).wait()
 
-                        subprocess.Popen(f'$ANTs_applyTransforms -d 3 -i {path_to_image_to_register}/{image_to_register} -r {path_to_ref_image}/{ref_image} -t {path_to_transformation_matrix}/{transformation_matrix} -n nearestNeighbor -o {path_to_registered_image}/{registered_image}.nii.gz', shell=True).wait()
+                        # subprocess.Popen(f'$ANTs_applyTransforms -d 3 -i {path_to_image_to_register}/{image_to_register} -r {path_to_ref_image}/{ref_image} -t {path_to_transformation_matrix}/{transformation_matrix} -n nearestNeighbor -o {path_to_registered_image}/{registered_image}.nii.gz', shell=True).wait()
+
+                        subprocess.Popen(f'docker run --rm --privileged -v {path_to_image_to_register}:/media/path_to_image_to_register -v {path_to_ref_image}:/media/path_to_ref_image -v {path_to_transformation_matrix}:/media/path_to_transformation_matrix -v {path_to_registered_image}:/media/path_to_registered_image colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && \$ANTs_applyTransforms -d 3 -i /media/path_to_image_to_register/{image_to_register} -r /media/path_to_ref_image/{ref_image} -t /media/path_to_transformation_matrix/{transformation_matrix} -n nearestNeighbor -o /media/path_to_registered_image/{registered_image}.nii.gz', shell=True).wait()
 
                         # self.client.containers.run('antsx/ants', auto_remove=True, volumes=[f'{path_to_image_to_register}:/data', f'{path_to_ref_image}:/media', f'{path_to_registered_image}:/home', f'{path_to_transformation_matrix}:/mnt'], command=f'/opt/ants/bin/antsApplyTransforms -d 3 -i /data/{image_to_register} -r /media/{ref_image} -t /mnt/{transformation_matrix} -n nearestNeighbor -o /home/{registered_image}.nii.gz')
 
@@ -973,8 +983,10 @@ class TransformationWorker(QObject):
 
                         # subprocess.Popen('${ANTSPATH}/antsApplyTransforms -d 3 -i {image_to_register} -r {ref_image} -t {transformation_matrix} -n nearestNeighbor -o {registered_image}.nii.gz',shell=True).wait()
 
-                        subprocess.Popen(f'$ANTs_applyTransforms -d 3 -i {path_to_image_to_register}/{image_to_register} -r {path_to_ref_image}/{ref_image} -t {path_to_transformation_matrix}/{transformation_matrix} -n nearestNeighbor -o {path_to_registered_image}/{registered_image}.nii.gz', shell=True).wait()
-
+                        # subprocess.Popen(f'$ANTs_applyTransforms -d 3 -i {path_to_image_to_register}/{image_to_register} -r {path_to_ref_image}/{ref_image} -t {path_to_transformation_matrix}/{transformation_matrix} -n nearestNeighbor -o {path_to_registered_image}/{registered_image}.nii.gz', shell=True).wait()
+                        
+                        subprocess.Popen(f'docker run --rm --privileged -v {path_to_image_to_register}:/media/path_to_image_to_register -v {path_to_ref_image}:/media/path_to_ref_image -v {path_to_transformation_matrix}:/media/path_to_transformation_matrix -v {path_to_registered_image}:/media/path_to_registered_image colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && \$ANTs_applyTransforms -d 3 -i /media/path_to_image_to_register/{image_to_register} -r /media/path_to_ref_image/{ref_image} -t /media/path_to_transformation_matrix/{transformation_matrix} -n nearestNeighbor -o /media/path_to_registered_image/{registered_image}.nii.gz', shell=True).wait()
+                        
                         # self.client.containers.run('antsx/ants', auto_remove=True, volumes=[f'{path_to_image_to_register}:/data', f'{path_to_ref_image}:/media', f'{path_to_registered_image}:/home', f'{path_to_transformation_matrix}:/mnt'], command=f'/opt/ants/bin/antsApplyTransforms -d 3 -i /data/{image_to_register} -r /media/{ref_image} -t /mnt/{transformation_matrix} -n nearestNeighbor -o /home/{registered_image}.nii.gz')
 
                         logging.info(f'Transforming {image_to_register} onto {ref_image} done')

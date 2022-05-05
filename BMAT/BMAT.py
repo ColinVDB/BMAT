@@ -104,14 +104,14 @@ class MainWindow(QMainWindow):
 
         """
         super().__init__()
-        # self.memory = {}
-        # try:
-        #     memory_df = pd.read_pickle('memory.xz')
-        #     self.memory = memory_df.to_dict()
-        #     for key in self.memory.keys():
-        #         self.memory[key] = self.memory[key][0]
-        # except FileNotFoundError:
-        #     memory_df = {}
+        self.memory = {}
+        try:
+            memory_df = pd.read_pickle('memory.xz')
+            self.memory = memory_df.to_dict()
+            for key in self.memory.keys():
+                self.memory[key] = self.memory[key][0]
+        except FileNotFoundError:
+            memory_df = {}
         self.system = platform.system()
 
         self.pipelines = {}
@@ -301,8 +301,8 @@ class MainWindow(QMainWindow):
         None.
 
         """
-        # memory_df = pd.DataFrame(self.memory, index=[0])
-        # memory_df.to_pickle('memory.xz')
+        memory_df = pd.DataFrame(self.memory, index=[0])
+        memory_df.to_pickle('memory.xz')
         # logging.info('Stop Listener')
         # self.std_out_text_receiver.deleteLater()
         # self.std_out_text_receiver.stop()
@@ -320,8 +320,8 @@ class MainWindow(QMainWindow):
         None.
 
         """
-        # memory_df = pd.DataFrame(self.memory, index=[0])
-        # memory_df.to_pickle('memory.xz')
+        memory_df = pd.DataFrame(self.memory, index=[0])
+        memory_df.to_pickle('memory.xz')
         # logging.info('Stop Listener')
         # self.std_out_text_receiver.deleteLater()
         # self.std_out_text_receiver.stop()
@@ -849,19 +849,30 @@ class BidsDirView(QWidget):
         if any(['.csv' in item_path, '.tsv' in item_path, '.xlsx' in item_path]):
             self.parent.updateViewer('excel', file=item_path)
         elif any(['.nii' in item_path, '.nii.gz' in item_path]):
-            # self.itksnap = self.parent.memory.get('itksnap')
-            # if self.itksnap == None:
-            #     pass
-            # else:
-            print(self.itksnap)
-            self.threads.append(QThread())
-            self.operation = SubprocessWorker(f'itksnap -g {item_path}')
-            self.operation.moveToThread(self.threads[-1])
-            self.threads[-1].started.connect(self.operation.run)
-            self.operation.finished.connect(self.threads[-1].quit)
-            self.operation.finished.connect(self.operation.deleteLater)
-            self.threads[-1].finished.connect(self.threads[-1].deleteLater)
-            self.threads[-1].start()
+            self.itksnap = self.parent.memory.get('itksnap')
+            if self.itksnap == None:
+                self.itksnap = QFileDialog.getOpenFileName(self, "Select the path to itksnap")[0]
+                if self.itksnap != None and self.itksnap != '':
+                    self.threads.append(QThread())
+                    self.operation = SubprocessWorker(f'{self.itksnap} -g {item_path}')
+                    self.operation.moveToThread(self.threads[-1])
+                    self.threads[-1].started.connect(self.operation.run)
+                    self.operation.finished.connect(self.threads[-1].quit)
+                    self.operation.finished.connect(self.operation.deleteLater)
+                    self.threads[-1].finished.connect(self.threads[-1].deleteLater)
+                    self.threads[-1].start()
+                    self.parent.memory['itksnap'] = self.itksnap
+                else:
+                    logging.info(f'No application selected open MRI \n \t Please select itksnap path')
+            else:
+                self.threads.append(QThread())
+                self.operation = SubprocessWorker(f'{self.itksnap} -g {item_path}')
+                self.operation.moveToThread(self.threads[-1])
+                self.threads[-1].started.connect(self.operation.run)
+                self.operation.finished.connect(self.threads[-1].quit)
+                self.operation.finished.connect(self.operation.deleteLater)
+                self.threads[-1].finished.connect(self.threads[-1].deleteLater)
+                self.threads[-1].start()
         else:
             self.parent.updateViewer('text', file=item_path)
             
@@ -898,17 +909,17 @@ class BidsDirView(QWidget):
         """
         menu = QMenu()
         openWith = menu.addAction('Open with')
-        openAdd = 'None'
-        openSeg = 'None'
+        # openAdd = 'None'
+        # openSeg = 'None'
         index = self.tree.indexAt(position)
         item = self.tree.selectedIndexes()[0]
         item_path = item.model().filePath(index)
         if '.nii' in item_path:
-            # if self.itksnap == None:
-                # self.itksnap = self.parent.memory.get('itksnap')
-            if self.itksnap != None:
-                openAdd = menu.addAction('Open as additional image')
-                openSeg = menu.addAction('Open as segmentation')
+            if self.itksnap == None:
+                self.itksnap = self.parent.memory.get('itksnap')
+            # if self.itksnap != None:
+            #     openAdd = menu.addAction('Open as additional image')
+            #     openSeg = menu.addAction('Open as segmentation')
         action = menu.exec_(self.tree.viewport().mapToGlobal(position))
 
         if action == openWith:
@@ -916,7 +927,7 @@ class BidsDirView(QWidget):
             self.itksnap = QFileDialog.getOpenFileName(self, "Select the path to itksnap")[0]
             if self.itksnap != None and self.itksnap != '':
                 self.threads.append(QThread())
-                self.operation = SubprocessWorker(f'itksnap -g {item_path}')
+                self.operation = SubprocessWorker(f'{self.itksnap} -g {item_path}')
                 self.operation.moveToThread(self.threads[-1])
                 self.threads[-1].started.connect(self.operation.run)
                 self.operation.finished.connect(self.threads[-1].quit)
@@ -927,26 +938,26 @@ class BidsDirView(QWidget):
             else:
                 logging.info(f'No application selected open MRI \n \t Please select itksnap path')
 
-        if action == openAdd:
-            logging.debug('Open as additional image')
-            self.threads.append(QThread())
-            self.operation = SubprocessWorker(f'itksnap -o {item_path}')
-            self.operation.moveToThread(self.threads[-1])
-            self.threads[-1].started.connect(self.operation.run)
-            self.operation.finished.connect(self.threads[-1].quit)
-            self.operation.finished.connect(self.operation.deleteLater)
-            self.threads[-1].finished.connect(self.threads[-1].deleteLater)
-            self.threads[-1].start()
+        # if action == openAdd:
+        #     logging.debug('Open as additional image')
+        #     self.threads.append(QThread())
+        #     self.operation = SubprocessWorker(f'itksnap -o {item_path}')
+        #     self.operation.moveToThread(self.threads[-1])
+        #     self.threads[-1].started.connect(self.operation.run)
+        #     self.operation.finished.connect(self.threads[-1].quit)
+        #     self.operation.finished.connect(self.operation.deleteLater)
+        #     self.threads[-1].finished.connect(self.threads[-1].deleteLater)
+        #     self.threads[-1].start()
 
-        if action == openSeg:
-            self.threads.append(QThread())
-            self.operation = SubprocessWorker(f'itksnap -s {item_path}')
-            self.operation.moveToThread(self.threads[-1])
-            self.threads[-1].started.connect(self.operation.run)
-            self.operation.finished.connect(self.threads[-1].quit)
-            self.operation.finished.connect(self.operation.deleteLater)
-            self.threads[-1].finished.connect(self.threads[-1].deleteLater)
-            self.threads[-1].start()
+        # if action == openSeg:
+        #     self.threads.append(QThread())
+        #     self.operation = SubprocessWorker(f'itksnap -s {item_path}')
+        #     self.operation.moveToThread(self.threads[-1])
+        #     self.threads[-1].started.connect(self.operation.run)
+        #     self.operation.finished.connect(self.threads[-1].quit)
+        #     self.operation.finished.connect(self.operation.deleteLater)
+        #     self.threads[-1].finished.connect(self.threads[-1].deleteLater)
+        #     self.threads[-1].start()
             
 
 

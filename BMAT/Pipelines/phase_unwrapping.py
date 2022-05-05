@@ -245,7 +245,7 @@ class PhaseUnwrappingTab(QWidget):
                     self.subjects_and_sessions.append((sub,self.sessions))
 
         self.thread = QThread()
-        self.action = FlairStarWorker(self.bids, subjects_and_sessions)
+        self.action = PhaseUnwrappingWorker(self.bids, self.subjects_and_sessions)
         self.action.moveToThread(self.thread)
         self.thread.started.connect(self.action.run)
         self.action.finished.connect(self.thread.quit)
@@ -280,14 +280,14 @@ class PhaseUnwrappingTab(QWidget):
 # =============================================================================
 # FlairStarWorker
 # =============================================================================
-class FlairStarWorker(QObject):
+class PhaseUnwrappingWorker(QObject):
     """
     """
     finished = pyqtSignal()
     progress = pyqtSignal(int)
 
 
-    def __init__(self, bids, sub, ses):
+    def __init__(self, bids, subjects_and_sessions):
         """
 
 
@@ -307,8 +307,7 @@ class FlairStarWorker(QObject):
         """
         super().__init__()
         self.bids = bids
-        self.sub = sub
-        self.ses = ses
+        self.subjects_and_sessions = subjects_and_sessions
         self.client = docker.from_env()
 
 
@@ -339,7 +338,7 @@ class FlairStarWorker(QObject):
 
                     subprocess.Popen(f'docker run --rm -v {sub_ses_directory}:/data blakedewey/phase_unwrap -p {phase_wrapped} -o {phase_unwrapped_output}', shell=True).wait()
                     # self.client.containers.run('blakedewey/phase_unwrap', auto_remove=True, volumes=[f'{sub_ses_directory}:/data'], command=f'-p {phase_wrapped} -o {phase_unwrapped_output}')
-
+                    
                     shutil.move(pjoin(sub_ses_directory, phase_unwrapped), sub_ses_derivative_path)
 
                     logging.info(f'Phase Unwrapped for sub-{sub} ses-{ses} computed!')

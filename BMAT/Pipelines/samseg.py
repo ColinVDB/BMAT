@@ -401,7 +401,7 @@ class LesVoLocSegWorker(QObject):
         sub_ses_directory = pjoin(self.bids.root_dir, f'sub-{self.sub}', f'ses-{self.ses}', 'anat')
         flair = f'sub-{self.sub}_ses-{self.ses}_FLAIR.nii.gz'
         mprage = f'sub-{self.sub}_ses-{self.ses}_acq-MPRAGE_T1w.nii.gz'
-        license_location = f'/home/stluc/Programmes/freesurfer'
+        license_location = f'license.txt'
         #create directories
         directorysegment = [pjoin('derivatives', derivative), pjoin('derivatives', derivative, segment), pjoin('derivatives', derivative, segment, f'sub-{self.sub}'), pjoin('derivatives', derivative, segment, f'sub-{self.sub}', f'ses-{self.ses}')]
         directorytransfo = [pjoin('derivatives', derivative), pjoin('derivatives', derivative, transfo),pjoin('derivatives', derivative, transfo, f'sub-{self.sub}'), pjoin('derivatives', derivative, transfo, f'sub-{self.sub}', f'ses-{self.ses}')]
@@ -440,7 +440,9 @@ class LesVoLocSegWorker(QObject):
                     # /usr/local/freesurfer/subjects
                     resize = f'recon-all -motioncor -i /input/{flair} -subjid sub-{self.sub}_FLAIR_used -sd /usr/local/freesurfer/subjects'
                     
-                    subprocess.Popen(f'recon-all -motioncor -i {sub_ses_directory}/{flair} -subjid sub-{self.sub}_FLAIR_used -sd {sub_ses_derivative_path_transfo}', shell=True).wait()
+                    # subprocess.Popen(f'recon-all -motioncor -i {sub_ses_directory}/{flair} -subjid sub-{self.sub}_FLAIR_used -sd {sub_ses_derivative_path_transfo}', shell=True).wait()
+                    
+                    subprocess.Popen(f'docker run --rm --privileged -v {license_location}:/programs/freesurfer/license.txt -v {sub_ses_directory}:/input -v {sub_ses_derivative_path_transfo}:/usr/local/freesurfer/subjects colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && {resize}"', shell=True).wait()
                     
                     # self.client.containers.run('freesurfer/freesurfer:7.2.0', auto_remove=True, environment =['FS_LICENSE=/data/license.txt'], volumes=[f'{license_location}:/data',f'{sub_ses_directory}:/input', f'{sub_ses_derivative_path_transfo}:/usr/local/freesurfer/subjects' ], command=resize)
                     #subprocess.Popen(f'docker run --rm -e FS_LICENSE=/data/license.txt -v {license_location}:/data -v {sub_ses_directory}:/input -v {sub_ses_derivative_path_transfo}:/usr/local/freesurfer/subjects freesurfer/freesurfer:7.2.0 {resize}', shell=True).wait()
@@ -456,7 +458,9 @@ class LesVoLocSegWorker(QObject):
                     convert = f'mri_convert /usr/local/freesurfer/subjects/sub-{self.sub}_FLAIR_used/mri/orig.mgz /usr/local/freesurfer/subjects/sub-{self.sub}_FLAIR_used.nii.gz'
                     #3eme path vers l'endroit où se trouve la license
                     
-                    subprocess.Popen(f'mri_convert {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used/mri/orig.mgz {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used.nii.gz', shell=True).wait()
+                    # subprocess.Popen(f'mri_convert {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used/mri/orig.mgz {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used.nii.gz', shell=True).wait()
+                    
+                    subprocess.Popen(f'docker run --rm --privileged -v {license_location}:/programs/freesurfer/license.txt -v {sub_ses_derivative_path_transfo}:/usr/local/freesurfer/subjects colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && {convert}"', shell=True).wait()
                     
                     # self.client.containers.run('freesurfer/freesurfer:7.2.0', auto_remove=True,environment =['FS_LICENSE=/data/license.txt'], volumes=[f'{license_location}:/data', f'{sub_ses_derivative_path_transfo}:/usr/local/freesurfer/subjects'], command=convert)
                  
@@ -471,7 +475,9 @@ class LesVoLocSegWorker(QObject):
                          
                         register = f'/opt/ants/bin/antsRegistrationSyNQuick.sh -d 3 -n 4 -f /data/sub-{self.sub}_FLAIR_used.nii.gz -m /media/{mprage} -t r -o sub-{self.sub}_MPRAGE_used'
                         
-                        subprocess.Popen(f'$ANTs_registration -d 3 -n 4 -f {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used.nii.gz -m {sub_ses_directory}/{mprage} -t r -o sub-{self.sub}_MPRAGE_used', shell=True).wait()
+                        # subprocess.Popen(f'$ANTs_registration -d 3 -n 4 -f {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used.nii.gz -m {sub_ses_directory}/{mprage} -t r -o sub-{self.sub}_MPRAGE_used', shell=True).wait()
+                        
+                        subprocess.Popen(f'docker run --rm --privileged -v {license_location}:/programs/freesurfer/license.txt -v {sub_ses_derivative_path_transfo}:/data -v {sub_ses_directory}:/media colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && \$ANTs_registration -d 3 -n 4 -f /data/sub-{self.sub}_FLAIR_used.nii.gz -m /media/{mprage} -t r -o sub-{self.sub}_MPRAGE_used"', shell=True).wait()
                         
                         # self.client.containers.run('antsx/ants', auto_remove=True, volumes=[f'{sub_ses_derivative_path_transfo}:/data', f'{sub_ses_directory}:/media'], command=register)
                      
@@ -505,7 +511,9 @@ class LesVoLocSegWorker(QObject):
                         
                         register = f'/opt/ants/bin/antsRegistrationSyNQuick.sh -d 3 -n 4 -f /data/sub-{self.sub}_FLAIR_used.nii.gz -m /media/{mprage} -t r -o sub-{self.sub}_MPRAGE_used'
                         
-                        subprocess.Popen(f'$ANTs_registration -d 3 -n 4 -f {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used.nii.gz -m {sub_ses_directory}/{mprage} -t r -o sub-{self.sub}_MPRAGE_used', shell=True).wait()
+                        # subprocess.Popen(f'$ANTs_registration -d 3 -n 4 -f {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used.nii.gz -m {sub_ses_directory}/{mprage} -t r -o sub-{self.sub}_MPRAGE_used', shell=True).wait()
+                        
+                        subprocess.Popen(f'docker run --rm --privileged -v {license_location}:/programs/freesurfer/license.txt -v {sub_ses_derivative_path_transfo}:/data -v {sub_ses_directory}:/media colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && \$ANTs_registration -d 3 -n 4 -f /data/sub-{self.sub}_FLAIR_used.nii.gz -m /media/{mprage} -t r -o sub-{self.sub}_MPRAGE_used"', shell=True).wait()
                         
                         # self.client.containers.run('antsx/ants', auto_remove=True, volumes=[f'{sub_ses_derivative_path_transfo}:/data', f'{sub_ses_directory}:/media'], command=register)
                         
@@ -528,12 +536,16 @@ class LesVoLocSegWorker(QObject):
                     #mri_convert pour avoir les FLAIR et MPRAGE_used en mgz au bon endroit
                     convert = f'mri_convert /usr/local/freesurfer/subjects/sub-{self.sub}_FLAIR_used.nii.gz /usr/local/freesurfer/subjects/sub-{self.sub}_FLAIR_used.mgz'
                     
-                    subprocess.Popen(f'mri_convert {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used.nii.gz {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used.mgz', shell=True).wait()
+                    # subprocess.Popen(f'mri_convert {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used.nii.gz {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used.mgz', shell=True).wait()
+                    
+                    subprocess.Popen(f'docker run --rm --privileged -v {license_location}:/programs/freesurfer/license.txt -v {sub_ses_derivative_path_transfo}:/usr/local/freesurfer/subjects colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root.bashrc && {convert}"', shell=True).wait()
                     
                     # self.client.containers.run('freesurfer/freesurfer:7.2.0', auto_remove=True, environment =['FS_LICENSE=/data/license.txt'], volumes=[f'{license_location}:/data', f'{sub_ses_derivative_path_transfo}:/usr/local/freesurfer/subjects'], command=convert)
                     convert = f'mri_convert /usr/local/freesurfer/subjects/sub-{self.sub}_MPRAGE_used.nii.gz /usr/local/freesurfer/subjects/sub-{self.sub}_MPRAGE_used.mgz'
                     
-                    subprocess.Popen(f'mri_convert {sub_ses_derivative_path_transfo}/sub-{self.sub}_MPRAGE_used.nii.gz {sub_ses_derivative_path_transfo}/sub-{self.sub}_MPRAGE_used.mgz', shell=True).wait()
+                    # subprocess.Popen(f'mri_convert {sub_ses_derivative_path_transfo}/sub-{self.sub}_MPRAGE_used.nii.gz {sub_ses_derivative_path_transfo}/sub-{self.sub}_MPRAGE_used.mgz', shell=True).wait()
+                    
+                    subprocess.Popen(f'docker run --rm --privileged -v {license_location}:/programs/freesurfer/license.txt -v {sub_ses_derivative_path_transfo}:/usr/local/freesurfer/subjects colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root.bashrc && {convert}"', shell=True).wait()
                     
                     # self.client.containers.run('freesurfer/freesurfer:7.2.0', auto_remove=True, environment =['FS_LICENSE=/data/license.txt'], volumes=[f'{license_location}:/data', f'{sub_ses_derivative_path_transfo}:/usr/local/freesurfer/subjects'], command=convert)
                  
@@ -541,14 +553,18 @@ class LesVoLocSegWorker(QObject):
                     # https://surfer.nmr.mgh.harvard.edu/fswiki/Samseg
                     samseg = f'run_samseg -i /input/sub-{self.sub}_MPRAGE_used.mgz -i /input/sub-{self.sub}_FLAIR_used.mgz --lesion --lesion-mask-pattern 0 1 --threads 4 -o /media --save-posteriors'
                     
-                    subprocess.Popen(f'run_samseg -i {sub_ses_derivative_path_transfo}/sub-{self.sub}_MPRAGE_used.mgz -i {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used.mgz --lesion --lesion-mask-pattern 0 1 --threads 4 -o {sub_ses_derivative_path_segment} --save-posteriors', shell=True).wait()
+                    # subprocess.Popen(f'run_samseg -i {sub_ses_derivative_path_transfo}/sub-{self.sub}_MPRAGE_used.mgz -i {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used.mgz --lesion --lesion-mask-pattern 0 1 --threads 4 -o {sub_ses_derivative_path_segment} --save-posteriors', shell=True).wait()
+                    
+                    subprocess.Popen(f'docker run --rm --privileged -v {license_location}:/programs/freesurfer/license.txt -v {sub_ses_derivative_path_transfo}:/input -v {sub_ses_derivative_path_segment}:/media colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root.bashrc && {samseg}"', shell=True).wait()
                     
                     # self.client.containers.run('freesurfer/freesurfer:7.2.0', auto_remove=True, environment =['FS_LICENSE=/data/license.txt'], volumes=[f'{license_location}:/data', f'{sub_ses_derivative_path_transfo}:/input', f'{sub_ses_derivative_path_segment}:/media'],command=samseg)
                     #subprocess.Popen(f'docker run --rm -e FS_LICENSE=/data/license.txt -v {license_location}:/data -v {sub_ses_derivative_path_transfo}:/input -v {sub_ses_derivative_path_segment}:/media freesurfer/freesurfer:7.2.0 {samseg}', shell=True).wait()
                     
                     convert = f'mri_convert /usr/local/freesurfer/subjects/posteriors/Lesions.mgz /usr/local/freesurfer/subjects/sub-{self.sub}_lesions.nii.gz'
                     
-                    subprocess.Popen(f'mri_convert {sub_ses_derivative_path_segment}/posteriors/Lesions.mgz {sub_ses_derivative_path_segment}/sub-{self.sub}_lesions.nii.gz', shell=True).wait()
+                    # subprocess.Popen(f'mri_convert {sub_ses_derivative_path_segment}/posteriors/Lesions.mgz {sub_ses_derivative_path_segment}/sub-{self.sub}_lesions.nii.gz', shell=True).wait()
+                    
+                    subprocess.Popen(f'docker run --rm --privileged -v {license_location}:/programs/freesurfer/license.txt -v {sub_ses_derivative_path_segment}:/usr/local/freesurfer/subjects colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root.bashrc && {convert}"', shell=True).wait()
                     
                     # self.client.containers.run('freesurfer/freesurfer:7.2.0', auto_remove=True, environment =['FS_LICENSE=/data/license.txt'], volumes=[f'{license_location}:/data', f'{sub_ses_derivative_path_segment}:/usr/local/freesurfer/subjects'], command=convert)
                   
@@ -567,7 +583,9 @@ class LesVoLocSegWorker(QObject):
                     #mri_convert pour avoir les FLAIR et MPRAGE_used en mgz au bon endroit
                     convert = f'mri_convert /usr/local/freesurfer/subjects/sub-{self.sub}_FLAIR_used.nii.gz /usr/local/freesurfer/subjects/sub-{self.sub}_FLAIR_used.mgz'
                     
-                    subprocess.Popen(f'mri_convert {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used.nii.gz {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used.mgz', shell=True).wait()
+                    # subprocess.Popen(f'mri_convert {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used.nii.gz {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used.mgz', shell=True).wait()
+                    
+                    subprocess.Popen(f'docker run --rm --privileged -v {license_location}:/programs/freesurfer/license.txt -v {sub_ses_derivative_path_transfo}:/usr/local/freesurfer/subjects colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root.bashrc && {convert}"', shell=True).wait()
                     
                     # self.client.containers.run('freesurfer/freesurfer:7.2.0', auto_remove=True, environment =['FS_LICENSE=/data/license.txt'], volumes=[f'{license_location}:/data', f'{sub_ses_derivative_path_transfo}:/usr/local/freesurfer/subjects'], command=convert)
                     # convert = f'mri_convert /usr/local/freesurfer/subjects/sub-{self.sub}_MPRAGE_used.nii.gz /usr/local/freesurfer/subjects/sub-{self.sub}_MPRAGE_used.mgz'
@@ -577,14 +595,18 @@ class LesVoLocSegWorker(QObject):
                     # https://surfer.nmr.mgh.harvard.edu/fswiki/Samseg
                     samseg = f'run_samseg -i /input/sub-{self.sub}_FLAIR_used.mgz --lesion --lesion-mask-pattern 0 --threads 4 -o /media --save-posteriors'
                     
-                    subprocess.Popen(f'run_samseg -i {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used.mgz --lesion --lesion-mask-pattern 0 --threads 4 -o {sub_ses_derivative_path_segment} --save-posteriors', shell=True).wait()
+                    # subprocess.Popen(f'run_samseg -i {sub_ses_derivative_path_transfo}/sub-{self.sub}_FLAIR_used.mgz --lesion --lesion-mask-pattern 0 --threads 4 -o {sub_ses_derivative_path_segment} --save-posteriors', shell=True).wait()
                     
-                    # self.client.containers.run('freesurfer/freesurfer:7.2.0', auto_remove=True, environment =['FS_LICENSE=/data/license.txt'], volumes=[f'{license_location}:/data', f'{sub_ses_derivative_path_transfo}:/input', f'sub_ses_derivative_path_segment:/media'],command=samseg)
+                    subprocess.Popen(f'docker run --rm --privileged -v {license_location}:/programs/freesurfer/license.txt -v {sub_ses_derivative_path_transfo}:/input -v {sub_ses_derivative_path_segment}:/media colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root.bashrc && {samseg}"', shell=True).wait()
+                    
+                    # self.client.containers.run('freesurfer/freesurfer:7.2.0', auto_remove=True, environment =['FS_LICENSE=/data/license.txt'], volumes=[f'{license_location}:/data', f'{sub_ses_derivative_path_transfo}:/input', f'{sub_ses_derivative_path_segment}:/media'],command=samseg)
                     #subprocess.Popen(f'docker run --rm -e FS_LICENSE=/data/license.txt -v {license_location}:/data -v {sub_ses_derivative_path_transfo}:/input -v {sub_ses_derivative_path_segment}:/media freesurfer/freesurfer:7.2.0 {samseg}', shell=True).wait()
                     
                     convert = f'mri_convert /usr/local/freesurfer/subjects/posteriors/Lesions.mgz /usr/local/freesurfer/subjects/sub-{self.sub}_lesions.nii.gz'
                     
-                    subprocess.Popen(f'mri_convert {sub_ses_derivative_path_segment}/posteriors/Lesions.mgz {sub_ses_derivative_path_segment}/sub-{self.sub}_lesions.nii.gz', shell=True).wait()
+                    # subprocess.Popen(f'mri_convert {sub_ses_derivative_path_segment}/posteriors/Lesions.mgz {sub_ses_derivative_path_segment}/sub-{self.sub}_lesions.nii.gz', shell=True).wait()
+                    
+                    subprocess.Popen(f'docker run --rm --privileged -v {license_location}:/programs/freesurfer/license.txt -v {sub_ses_derivative_path_segment}:/usr/local/freesurfer/subjects colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root.bashrc && {convert}"', shell=True).wait()
                     
                     # self.client.containers.run('freesurfer/freesurfer:7.2.0', auto_remove=True, environment =['FS_LICENSE=/data/license.txt'], volumes=[f'{license_location}:/data', f'{sub_ses_derivative_path_segment}:/usr/local/freesurfer/subjects'], command=convert)
               

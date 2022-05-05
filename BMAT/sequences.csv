@@ -12,6 +12,7 @@ mprage+Morpho,MPRAGE_morpho,,,,,,,,,,,,,IGNORED
 t1_mprage,T1w,_,MPRAGE,,,,,,,,,,,IGNORED
 MPRAGE,T1w,_,MPRAGE,Gad,gad,,,,,,,,,anat
 Black_Blood,T1w,_,MPRAGE,Gd,gad,,,,,,,,,anat
+3D_AX_T1,T1w,_,MPRAGE,Gad,gad,,,,,,,,,anat
 3D_EPI,T2starw,,,Gad,gad,,,,,SWIphase,phase,,,anat
 3D_EPI,T2starw,,,Gad,gad,,,,,_,mag,,,anat
 3DT2,T2starw,,,,,,,,,_ph,phase,,,anat

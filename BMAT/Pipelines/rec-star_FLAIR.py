@@ -245,7 +245,7 @@ class FlairStarTab(QWidget):
                     self.subjects_and_sessions.append((sub,self.sessions))
 
         self.thread = QThread()
-        self.action = FlairStarWorker(self.bids, subjects_and_sessions)
+        self.action = FlairStarWorker(self.bids, self.subjects_and_sessions)
         self.action.moveToThread(self.thread)
         self.thread.started.connect(self.action.run)
         self.action.finished.connect(self.thread.quit)
