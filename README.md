@@ -114,6 +114,67 @@ ITK-SNAP is an easy-to-use 3D viewer for medical images (DICOM, NIfTI, etc.) and
 
 ### Installation process
 
+#### Download BMAT
+
+Now that all the dependencies have been downloaded and installed, it is now time to install BMAT. The first step is to download the software and you can either:
+
+* If you have git, open a terminal and navigate to the folder you want to install BMAT and then clone this repository by typing: 
+
+```
+git clone https://github.com/ColinVDB/BMAT.git
+```
+
+* Otherwise, you can download a zip version of the code by clicking on the green Code button at the top right of this page, then **Download ZIP**. Afterwards, extract the Zip file in the folder where you want BMAT to be installed. 
+
+The advantage of installing and using git will be when you will want to update BMAT. You will able to easily do it by typing this command:
+
+```
+git pull
+```
+
+#### Install python requirements 
+
+After having downloaded BMAT, you need to install all the required python module package in order for the software to work properly. To do so, open a terminal and navigate into the BMAT folder,
+```
+cd BMAT
+```
+Then install the required packages using this command:
+```
+pip install -r requirements.txt
+```
+
+#### Install docker required images
+
+The last part of the installation is to pull the different docker images used by the software. For that make sure that the docker daemon socket is active. On Windows and Mac, you will need to run Docker Desktop in the background for it to be active. To pull a docker image, open a terminal and type 'docker pull *name of the image to download*. There is 4 images that needs to be pulled:
+
+1. colinvdb/bmat-ext:0.0.1: this image is an docker extension of BMAT and contains all necessary programs that the software required to work properly like:
+  1. dcm2niix: for the conversion from DICOM to NIfTI
+  2. ANTs Registration: for the registration pipeline 
+  3. Freesurfer: For the automatic segmentation pipeline 
+```
+docker pull colinvdb/bmat-ext:0.0.1
+```
+2. bids/validator: this image is used to verify the BIDS validity of the datasets
+```
+docker pull bids/validator
+```
+3. blakedewey/phase_unwrap: this image is used to unwrap phase images and is used in th Phase unwrapping pipeline
+```
+docker pull blakedewey/phase_unwrap
+```
+4. blakedewey/flairstar: this image is used to compute a FLAIR* image based on a FLAIR and a Magnitude T2* image. 
+```
+docker pull blakedewey/flairstar:deprecated
+```
+For this image you will need to change locally the tag of this image by typing:
+```
+docker tag blakedewey/flairstar:deprecated blakedewey/flairstar:latest
+```
+
+**The installation of BMAT is now complete and the software is now ready to be launched**
+
+The next section will show how to use this software
+
 ## Utilization
 
 
