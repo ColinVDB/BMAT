@@ -148,9 +148,9 @@ pip install -r requirements.txt
 The last part of the installation is to pull the different docker images used by the software. For that make sure that the docker daemon socket is active. On Windows and Mac, you will need to run Docker Desktop in the background for it to be active. To pull a docker image, open a terminal and type 'docker pull *name of the image to download*. There is 4 images that needs to be pulled:
 
 1. colinvdb/bmat-ext:0.0.1: this image is an docker extension of BMAT and contains all necessary programs that the software required to work properly like:
-  1. dcm2niix: for the conversion from DICOM to NIfTI
-  2. ANTs Registration: for the registration pipeline 
-  3. Freesurfer: For the automatic segmentation pipeline 
+    1. dcm2niix: for the conversion from DICOM to NIfTI
+    2. ANTs Registration: for the registration pipeline 
+    3. Freesurfer: For the automatic segmentation pipeline 
 ```
 docker pull colinvdb/bmat-ext:0.0.1
 ```
