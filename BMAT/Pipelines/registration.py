@@ -63,7 +63,7 @@ from bids_validator import BIDSValidator
 from tqdm.auto import tqdm
 
 
-def launch(parent):
+def launch(parent, add_info=None):
     """
 
 
@@ -77,7 +77,7 @@ def launch(parent):
     None.
 
     """
-    window = MainWindow(parent)
+    window = MainWindow(parent, add_info)
     window.show()
 
 
@@ -90,7 +90,7 @@ class MainWindow(QMainWindow):
     """
 
 
-    def __init__(self, parent):
+    def __init__(self, parent, add_info):
         """
 
 
@@ -107,6 +107,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.parent = parent
         self.bids = self.parent.bids
+        self.add_info = add_info
 
         self.setWindowTitle("Registration")
         self.window = QWidget(self)

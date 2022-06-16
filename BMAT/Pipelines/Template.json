@@ -2,5 +2,6 @@
 	"name": "Template",
 	"source_code": "Template.py",
 	"import_name": "Template",
-	"attr": "Template"
+	"attr": "Template",
+	"add_info":{}
 }

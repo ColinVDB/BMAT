@@ -64,7 +64,7 @@ import docker
 from tqdm.auto import tqdm
 
 
-def launch(parent):
+def launch(parent, add_info=None):
     """
 
 
@@ -78,7 +78,7 @@ def launch(parent):
     None.
 
     """
-    window = MainWindow(parent)
+    window = MainWindow(parent, add_info)
     window.show()
 
 
@@ -91,7 +91,7 @@ class MainWindow(QMainWindow):
     """
 
 
-    def __init__(self, parent):
+    def __init__(self, parent, add_info):
         """
 
 
@@ -108,6 +108,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.parent = parent
         self.bids = self.parent.bids
+        self.add_info = add_info
 
         self.setWindowTitle("Phase Unwrapping")
         self.window = QWidget(self)
@@ -162,6 +163,7 @@ class PhaseUnwrappingTab(QWidget):
         super().__init__()
         self.parent = parent
         self.bids = self.parent.bids
+        self.add_info = self.parent.add_info
         self.setMinimumSize(500, 200)
 
         self.subjects_input = QLineEdit(self)
@@ -245,7 +247,7 @@ class PhaseUnwrappingTab(QWidget):
                     self.subjects_and_sessions.append((sub,self.sessions))
 
         self.thread = QThread()
-        self.action = PhaseUnwrappingWorker(self.bids, self.subjects_and_sessions)
+        self.action = PhaseUnwrappingWorker(self.bids, self.subjects_and_sessions, phase=self.add_info.get('phase'))
         self.action.moveToThread(self.thread)
         self.thread.started.connect(self.action.run)
         self.action.finished.connect(self.thread.quit)
@@ -287,7 +289,7 @@ class PhaseUnwrappingWorker(QObject):
     progress = pyqtSignal(int)
 
 
-    def __init__(self, bids, subjects_and_sessions):
+    def __init__(self, bids, subjects_and_sessions, phase='part-phase_acq-WRAPPED_T2starw'):
         """
 
 
@@ -308,6 +310,7 @@ class PhaseUnwrappingWorker(QObject):
         super().__init__()
         self.bids = bids
         self.subjects_and_sessions = subjects_and_sessions
+        self.phase = phase
         self.client = docker.from_env()
 
 
@@ -325,7 +328,7 @@ class PhaseUnwrappingWorker(QObject):
                 # Action
                 derivative = 'phase_unwrapped'
                 sub_ses_directory = pjoin(self.bids.root_dir, f'sub-{sub}', f'ses-{ses}', 'anat')
-                phase_wrapped = f'sub-{sub}_ses-{ses}_part-phase_T2starw_WRAPPED.nii.gz'
+                phase_wrapped = f'sub-{sub}_ses-{ses}_{self.phase}.nii.gz'
                 phase_unwrapped_output = f'sub-{sub}_ses-{ses}_part-phase_T2starw'
                 phase_unwrapped = f'sub-{sub}_ses-{ses}_part-phase_T2starw_UNWRAPPED.nii.gz'
                 # Create directory
@@ -339,7 +342,7 @@ class PhaseUnwrappingWorker(QObject):
                     subprocess.Popen(f'docker run --rm -v {sub_ses_directory}:/data blakedewey/phase_unwrap -p {phase_wrapped} -o {phase_unwrapped_output}', shell=True).wait()
                     # self.client.containers.run('blakedewey/phase_unwrap', auto_remove=True, volumes=[f'{sub_ses_directory}:/data'], command=f'-p {phase_wrapped} -o {phase_unwrapped_output}')
                     
-                    shutil.move(pjoin(sub_ses_directory, phase_unwrapped), sub_ses_derivative_path)
+                    shutil.move(pjoin(sub_ses_directory, phase_unwrapped), pjoin(sub_ses_derivative_path, f'sub-{sub}_ses-{ses}_part-phase_t2starw.nii.gz'))
 
                     logging.info(f'Phase Unwrapped for sub-{sub} ses-{ses} computed!')
                 except Exception as e:

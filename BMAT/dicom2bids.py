@@ -291,7 +291,7 @@ class BIDSHandler:
                 # subprocess.Popen(f'docker run --rm -v "{path}":/media -v "{directory}":/mnt xnat/dcm2niix dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /mnt /media', shell=True).wait()
                 # self.client.containers.run('xnat/dcm2niix', auto_remove=True, volumes={f'{path}':{'bind':'/media', 'mode':'ro'}, f'{directory}':{'bind':'/mnt', 'mode':'rw'}}, command=['dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /mnt /media'])
                 # subprocess.Popen(f'dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o {directory} {path}', shell=True).wait()
-                subprocess.Popen(f'docker run --rm --privileged -v {directory}:/home -v {path}:/media colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /home /media"', shell=True).wait()
+                subprocess.Popen(f'docker run --rm --privileged -v "{directory}":/home -v "{path}":/media colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /home /media"', shell=True).wait()
                 
         for _,_,files in os.walk(directory):
             for file in files:
@@ -332,7 +332,7 @@ class BIDSHandler:
     
     
     def make_directories(self, pat_id=None, session=None, logger=logging):
-        print('Make directories ???')
+        # print('Make directories ???')
         """
         
 
@@ -454,7 +454,7 @@ class BIDSHandler:
     
     @staticmethod
     def make_directories_from(bids_dir, pat_id=None, session=None, logger=logging):
-        print("WTF-make_directories_from !")
+        # print("WTF-make_directories_from !")
         """
         
 
@@ -674,7 +674,7 @@ class BIDSHandler:
         
 
     def rename_and_move_nifti(self, dicom_series, pat_id, session='01', logger=logging):
-        print('WTF???')
+        # print('WTF???')
         """
         
 
@@ -1039,7 +1039,7 @@ class BIDSHandler:
 
         """
         
-        print("WTF-bruh ?")
+        # print("WTF-bruh ?")
 
         pat_id = None if pat_id is None else str(int(pat_id)).zfill(3)
         session = None if session is None else str(int(session)).zfill(2)
@@ -1055,7 +1055,7 @@ class BIDSHandler:
         # logging.debug('make directories !')
         # To specify the patient id and session:
         # pat_id, session = make_directories(bids_dir,pat_id='ID_TO_SPECIFY',session='SESSION_TO_SPECIFY')
-        print("Debug, why does it stop")
+        # print("Debug, why does it stop")
         # Rename and move all (interesting) converted files into the bids directory
         self.rename_and_move_nifti(dicom_series, pat_id, session, logger=logger)
 
@@ -1199,7 +1199,7 @@ class BIDSHandler:
         
     
     def update_participants_tsv(self):
-        print('debug')
+        # print('debug')
         
         subjects_and_sessions = []
         for d in os.listdir(pjoin(self.root_dir)):
@@ -1212,10 +1212,10 @@ class BIDSHandler:
                         sess.append(ses)
                 subjects_and_sessions.append((sub, sess))
                     
-        print(subjects_and_sessions)
+        # print(subjects_and_sessions)
         for sub, sess in subjects_and_sessions:
             for ses in sess:
-                print(sub, ses)
+                # print(sub, ses)
                 self.anonymisation(sub, ses)
                     
         
@@ -1381,7 +1381,7 @@ class BIDSHandler:
         for ses in sessions:
             if ses != f'ses-{pat_ses}':
                 participants_json_keys.remove(ses)
-        print(participants_json_keys)
+        # print(participants_json_keys)
         tags = [(x, participants_json.get(x).get('dicom_tags')) for x in participants_json_keys]
         results = [None]*len(tags)
         tags_bool = [False]*len(tags)
@@ -1456,8 +1456,8 @@ class BIDSHandler:
         #     if f'ses-{pat_ses}' not in participants_tsv.keys():   
         #         participants_tsv[f'ses-{pat_ses}'] = {}
         #     participants_tsv[f'ses-{pat_ses}'][key_num] = pd.Timestamp(pat_date)
-        print(tags)
-        print(results)
+        # print(tags)
+        # print(results)
         if f'sub-{pat_id}' in participants_tsv['participant_id'].values():
             key_num = list(participants_tsv['participant_id'].values()).index(f'sub-{pat_id}')
         else:

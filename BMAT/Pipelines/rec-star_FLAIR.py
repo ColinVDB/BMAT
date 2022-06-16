@@ -64,7 +64,7 @@ import docker
 from tqdm.auto import tqdm
 
 
-def launch(parent):
+def launch(parent, add_info=None):
     """
 
 
@@ -78,7 +78,7 @@ def launch(parent):
     None.
 
     """
-    window = MainWindow(parent)
+    window = MainWindow(parent, add_info)
     window.show()
 
 
@@ -91,7 +91,7 @@ class MainWindow(QMainWindow):
     """
 
 
-    def __init__(self, parent):
+    def __init__(self, parent, add_info):
         """
 
 
@@ -108,6 +108,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.parent = parent
         self.bids = self.parent.bids
+        self.add_info = add_info
 
         self.setWindowTitle("Rec-star_FLAIR computation")
         self.window = QWidget(self)
@@ -162,6 +163,7 @@ class FlairStarTab(QWidget):
         super().__init__()
         self.parent = parent
         self.bids = self.parent.bids
+        self.add_info = self.parent.add_info
         self.setMinimumSize(500, 200)
 
         self.subjects_input = QLineEdit(self)
@@ -245,7 +247,7 @@ class FlairStarTab(QWidget):
                     self.subjects_and_sessions.append((sub,self.sessions))
 
         self.thread = QThread()
-        self.action = FlairStarWorker(self.bids, self.subjects_and_sessions)
+        self.action = FlairStarWorker(self.bids, self.subjects_and_sessions, flair=self.add_info.get('flair'), t2star=self.add_info.get('t2star'))
         self.action.moveToThread(self.thread)
         self.thread.started.connect(self.action.run)
         self.action.finished.connect(self.thread.quit)
@@ -287,7 +289,7 @@ class FlairStarWorker(QObject):
     progress = pyqtSignal(int)
 
 
-    def __init__(self, bids, subjects_and_sessions):
+    def __init__(self, bids, subjects_and_sessions, flair='FLAIR', t2star='part-mag_T2starw'):
         """
 
 
@@ -308,6 +310,8 @@ class FlairStarWorker(QObject):
         super().__init__()
         self.bids = bids
         self.subjects_and_sessions = subjects_and_sessions
+        self.flair = flair
+        self.t2star = t2star
         self.client = docker.from_env()
 
 
@@ -325,8 +329,8 @@ class FlairStarWorker(QObject):
                 # Action
                 derivative = 'rec-star_FLAIR'
                 sub_ses_directory = pjoin(self.bids.root_dir, f'sub-{sub}', f'ses-{ses}', 'anat')
-                flair = f'sub-{sub}_ses-{ses}_FLAIR.nii.gz'
-                t2star = f'sub-{sub}_ses-{ses}_part-mag_T2starw.nii.gz'
+                flair = f'sub-{sub}_ses-{ses}_{self.flair}.nii.gz'
+                t2star = f'sub-{sub}_ses-{ses}_{self.t2star}.nii.gz'
                 flair_star = f'sub-{sub}_ses-{ses}_{derivative}.nii.gz'
                 # Create directory
                 directories = [pjoin('derivatives', derivative), pjoin('derivatives', derivative, f'sub-{sub}'), pjoin('derivatives', derivative, f'sub-{sub}', f'ses-{ses}')]

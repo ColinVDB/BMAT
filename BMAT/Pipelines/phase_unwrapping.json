@@ -2,5 +2,6 @@
 	"name": "phase_unwrapping",
 	"source_code": "phase_unwrapping.py",
 	"import_name": "phase_unwrapping",
-	"attr": "phase_unwrapping"
+	"attr": "phase_unwrapping", 
+	"add_info":{"phase":"part-phase_acq-WRAPPED_T2starw"}
 }
