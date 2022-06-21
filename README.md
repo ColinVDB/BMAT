@@ -183,7 +183,7 @@ This section aims to explain how to use BMAT.
 
 When opening the software, a first window pops up and asks to select a BIDS dataset to launch BMAT. The user can either select a folder correponding to a BIDS dataset or create/select an empty folder to create a new BIDS dataset. 
 
-"add picture"
+![Openning Window](/Readme_Pictures/SelectBIDS.png)
 
 ### Main Window 
 
@@ -195,7 +195,7 @@ Here is a picture of the main window of BMAT. It is composed of these different 
 * BIDS menu (top left): contains other other actions to manage the dataset
 * Pipelines menu (top left): contains analysis pipelines to process the dataset
 
-"add picture"
+![Main Window](/Readme_Pictures/Main_Window.png)
 
 ### Safe File Explorer
 
@@ -203,7 +203,7 @@ This widget allows the user to navigate the files that are in his dataset in a s
 1. NIfTI files (.nii.gz) corresponding to images can be open in the quick viewer by clicking one time on the file; this will show one slice of the image. By double clicking on the file, this will open the image in an ITK-SNAP window, which is a complete 3D viewer for 3D medical images. ITK-SNAP also contains some useful tools for neuroimaging studies; manual segmentation for instance. 
 2. The *participants.tsv* file is a file that contains information about the subjects that are in the BIDS dataset. This file contains by default the subject participant_id, age, sex, and MRI session date. However, for neuroimaging studies, it is often useful to have other information on the subject. When opening the *participants.tsv* file in BMAT quick viewer, the software proposes a button **Add** to add information about the subject in this file. Indeed, the software is able to retrieve any information that is contained in the DICOM file. To do so, the user needs to give the software the name of this new information (this will be used for the name of the column), a description of this new information and the DICOM keyword that needs to be used to retrieve this information. The software will then retrieve this information in the DICOM of every subject in the database and keep this new information in the *participants.json* file. It will then automatically retrieve this new information for every new subject added to the dataset.
 
-"add picture"
+![Safe File Explorer](/Readme_Pictures/SafeFileExplorer.png)
 
 ### BIDS Actions
 
@@ -215,7 +215,7 @@ When creating a new BIDS dataset, the first thing to do is to import new data in
 
 When clicking on the **Add** button, it will open a dedicated window for the user to select entire sessions of subjects to add to the dataset. The user can add specific folder containing the DICOM files or compressed folder in the ZIP format. Associated with each MRI session, the user can specify a corresponding subject ID and session NUMBER to use; this is especially useful when working with longitudinal study to specify the software that it corresponds to a follow-up MRI session for a certain subject. Otherwise, by not specifying anything, the software will assume that this session corresponds to the first session of a new subject and will select a new available subject ID. By clicking on the **Add to BIDS** button, BMAT will automatically convert the DICOM files into the NIfTI format using *dicom2niix*, create the corresponding folders for this subject in the dataset, rename the files and store them in the right places in the dataset (the DICOM files are stored in the *sourcedata* folder and the NIfTI and json files in the corresponding subject folder. 
 
-"add picture"
+![Add Window](/Readme_Pictures/add_window.png)
 
 For the renaming of the files, BMAT uses a keywords recognition scheme described in the *sequences.csv* file that is found in the *BMAT* folder. This must be completed by the user with information about the sequences that he uses prior to the utilization of the software:
 The renaming strategy is user-dependent and based on a mapping between the NIFTI file name after conversion with *dicom2niix* (mainly the *SeriesDescription* in the DICOM files) and the corresponding BIDS modality, described in the *sequences.csv* file. The mapping file needs only to be completed once at the beginning of the study and the software will then be able to recognize and work with these sequences. The mapping file works as follow; the software recognizes keywords in the file name and maps them to the corresponding BIDS name. The renaming scheme works in 3 steps: 
@@ -224,7 +224,7 @@ The renaming strategy is user-dependent and based on a mapping between the NIFTI
 3. Finally, the MRI_type column contains the name of the subfolder in which this sequence needs to be stored. If the *IGNORED* keyword is used, the sequence will not be considered in the BIDS dataset. This is especially useful to not consired the Localization sequence that are used during the MRI exam to acquire the other sequences. 
 The software is always trying the keywords from top to bottom of the file and stop as soon as it gets a match. This scheme means that it is up to the user to follow BIDS specification for the renaming of the sequences. The software will only validate the dataset as BIDS compliant or not. 
 
-"add picture"
+![sequences.csv file](/Readme_Pictures/sequences_csv.png)
 
 #### Remove Data
 
@@ -254,7 +254,7 @@ Here is a description of the available pipelines.
 
 This pipeline allows the user to register a certain image into the space of another image. For that BMAT uses *antsRegistrationSynQuick* from *ANTs* registration tool ([ANTs registration](http://stnava.github.io/ANTs/). This allows to quickly perform a rigid registration from one image to another. This registration will computer the registered image and the transformation matrix that have been used. This transformation matrix can also be used to register another images from the initial space to the reference space. 
 
-"add picture"
+![Registration Piepeline](/Readme_Pictures/registrations.png)
 
 Finally, this operation can be scripted for several subjects of the database using the *Select subjects* and *Select sessions* input lines. For both, the user can enter the ID of the subjects and sessions that he wants to process, seperated by a comma (e.g. 001,002,010,023). He can also uses "-" keyword to specify to the software that he wants to process subject from ID0 to ID1 (e.g. 001-005 will processed subjects 001,002,003,004 and 005). Finally, by using the "all" keyword, the software will processed all the subjects inside the database. **However, be mindful that the processing pipelines tend to take a significant amount of time**. 
 
@@ -282,7 +282,7 @@ This pipeline is based on [FreeSurfer](https://surfer.nmr.mgh.harvard.edu/) and 
 2. Computation of the volumetry of the different region of the brain with **FreeSurfer**
 3. Lesion localisation and volumetry computation by combining informations from **SAMSEG** and **FreeSurfer**
 
-"add picture"
+![LesVolLoc](/Readme_Pictures/LesVolLoc.png)
 
 Finally, this operation can be scripted for several subjects of the database using the *Select subjects* and *Select sessions* input lines. For both, the user can enter the ID of the subjects and sessions that he wants to process, seperated by a comma (e.g. 001,002,010,023). He can also uses "-" keyword to specify to the software that he wants to process subject from ID0 to ID1 (e.g. 001-005 will processed subjects 001,002,003,004 and 005). Finally, by using the "all" keyword, the software will processed all the subjects inside the database. **However, be mindful that the processing pipelines tend to take a significant amount of time**. 
 
