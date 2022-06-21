@@ -397,7 +397,7 @@ class MainWindow(QMainWindow):
             return
 
         if self.new_pipelines.get(pipe) != None:
-            self.new_pipelines[pipe]['import'].launch(self, add_info=self.pipelines[pipe]['add_info'])
+            self.new_pipelines[pipe]['import'].launch(self, add_info=self.new_pipelines[pipe]['add_info'])
             return
 
 

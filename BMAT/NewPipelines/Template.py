@@ -228,9 +228,9 @@ class ActionWorker(QObject):
 
         """
         # Action
-        logging.info('Beginning of the action')
+        print('Beginning of the action')
         time.sleep(10)
-        logging.info('End of the action')
+        print('End of the action')
         self.finished.emit()
 
 

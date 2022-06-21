@@ -244,17 +244,58 @@ This menu contains some more features to manage the BIDS dataset. Here is a desc
 
 ### Pipelines Menu
 
+This menu contains the different analysis pipelines that are integrated into BMAT to process the images inside the dataset. All these pipelines work with docker. 
+
 #### Available pipelines
+
+Here is a description of the available pipelines. 
 
 ##### Registration pipeline
 
+This pipeline allows the user to register a certain image into the space of another image. For that BMAT uses *antsRegistrationSynQuick* from *ANTs* registration tool ([ANTs registration](http://stnava.github.io/ANTs/). This allows to quickly perform a rigid registration from one image to another. This registration will computer the registered image and the transformation matrix that have been used. This transformation matrix can also be used to register another images from the initial space to the reference space. 
+
+"add picture"
+
+Finally, this operation can be scripted for several subjects of the database using the *Select subjects* and *Select sessions* input lines. For both, the user can enter the ID of the subjects and sessions that he wants to process, seperated by a comma (e.g. 001,002,010,023). He can also uses "-" keyword to specify to the software that he wants to process subject from ID0 to ID1 (e.g. 001-005 will processed subjects 001,002,003,004 and 005). Finally, by using the "all" keyword, the software will processed all the subjects inside the database. **However, be mindful that the processing pipelines tend to take a significant amount of time**. 
+
 ##### FLAIR* pipeline
+
+This pipeline allows to reconstruct the FLAIR* sequence by multiplying the FLAIR sequence with the magnitude T2star sequence. This pipeline is especially usesful to observe the Central Vein Sign for Multiple Sclerosis studies. This is based on the following docker of Blake Dewey: [blakedewey/flairstar](https://hub.docker.com/r/blakedewey/flairstar).
+
+The user needs to specify the name of the FLAIR sequence and the magnitude T2satr used in this dataset via the "add_info" dictionnary in the json file of the pipeline. By default, the FLAIR sequence is "FLAIR" and the magnitude sequence is "part-mag\_T2starw".
+
+Finally, this operation can be scripted for several subjects of the database using the *Select subjects* and *Select sessions* input lines. For both, the user can enter the ID of the subjects and sessions that he wants to process, seperated by a comma (e.g. 001,002,010,023). He can also uses "-" keyword to specify to the software that he wants to process subject from ID0 to ID1 (e.g. 001-005 will processed subjects 001,002,003,004 and 005). Finally, by using the "all" keyword, the software will processed all the subjects inside the database. **However, be mindful that the processing pipelines tend to take a significant amount of time**. 
 
 ##### Phase unwrapping pipeline
 
+This pipeline allows to unwrap the phase image from Susceptibility Weighted images. This pipeline is especially usesful to observe the Paramagnetic Rim Lesions for Multiple Sclerosis studies. This is based on the following docker of Blake Dewey: [blakedewey/phase_unwrap](https://hub.docker.com/r/blakedewey/phase_unwrap).
+
+The user needs to specify the name of the wrapped phase sequence used in this dataset via the "add_info" dictionnary in the json file of the pipeline. By default, the wrapped phase sequence is "acq-WRAPPED\_part-phase\_T2starw".
+
+Finally, this operation can be scripted for several subjects of the database using the *Select subjects* and *Select sessions* input lines. For both, the user can enter the ID of the subjects and sessions that he wants to process, seperated by a comma (e.g. 001,002,010,023). He can also uses "-" keyword to specify to the software that he wants to process subject from ID0 to ID1 (e.g. 001-005 will processed subjects 001,002,003,004 and 005). Finally, by using the "all" keyword, the software will processed all the subjects inside the database. **However, be mindful that the processing pipelines tend to take a significant amount of time**. 
+
 ##### LesVolLoc pipeline
-:warning: <span style="color:red">some **This Pipeline is not functionnal yet !!!** text</span> :warning:
+:warning:**This Pipeline is not functionnal yet !!!**:warning:
+
+This pipeline is based on [FreeSurfer](https://surfer.nmr.mgh.harvard.edu/) and [SAMSEG](https://surfer.nmr.mgh.harvard.edu/fswiki/Samseg) and has three principal features:
+1. Automatic segmentations of white matter lesions with **SAMSEG**
+2. Computation of the volumetry of the different region of the brain with **FreeSurfer**
+3. Lesion localisation and volumetry computation by combining informations from **SAMSEG** and **FreeSurfer**
+
+"add picture"
+
+Finally, this operation can be scripted for several subjects of the database using the *Select subjects* and *Select sessions* input lines. For both, the user can enter the ID of the subjects and sessions that he wants to process, seperated by a comma (e.g. 001,002,010,023). He can also uses "-" keyword to specify to the software that he wants to process subject from ID0 to ID1 (e.g. 001-005 will processed subjects 001,002,003,004 and 005). Finally, by using the "all" keyword, the software will processed all the subjects inside the database. **However, be mindful that the processing pipelines tend to take a significant amount of time**. 
 
 #### Adding pipelines
+
+BMAT allows the user to add his own pipelines to the software to run specific in-house developed pipelines. To add a new Pipeline to the software, the user must add its source code in python containing a dedicated graphical interface using PyQt5 and the computation code, as well as an associated JSON file containing metainformation about the pipeline, in the *NewPipelines* folder of the source code of the software. The JSON file must be written in a dictionary-like structure, as described in Figure 6 and contain the following pieces of information: 
+
+* "name”: the name of the Pipeline that will be displayed in the ‘Pipelines’ drop-down menu in the software. 
+* “source_code”: the name of the python file containing the source code for the graphical interface of the pipeline. This file needs to be implemented using PyQt5 python module and contain a launch function, that takes the Main Window of the software as only argument, and that launches the graphical interface of the Pipeline. User can take the Template pipeline as an example.
+* “import_name”: the name of the corresponding module that needs to be imported in python. It corresponds to the name of the python source code file without the ‘.py’ extension.
+* “attr”: the name of the attribute of the imported ‘Pipelines’ python module corresponding to the python source code of the pipeline. Again, this corresponds to the name of the python source code file without the ‘.py’ extension. 
+* "add_info": this contains a dictionnary containing some specific information that the pipeline needs to run (e.g. the name of a sequence to use). 
+    
+The implementation of the computation part of the pipeline can use docker container or can be implemented locally, allowing adaptability of the software to a wide range of Neuroimaging applications.
 
 
