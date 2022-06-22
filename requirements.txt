@@ -18,3 +18,4 @@ nibabel
 numpy
 bids_validator
 zipp
+scipy
