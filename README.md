@@ -16,6 +16,8 @@ Firstly, this section presents the different dependencies that needs to be insta
 
 This software is written entirely in Python and thus required Python to be installed to work properly. Pip is also needed to install the different packages that the software requires. Pip can sometimes be installed additionnaly when installing Python but not in every case, so it needs to be verified. The installation will be described for the different possible OS.
 
+⚠️ **Python version should be >= 3.8** ⚠️
+
 ##### Linux
 
 [Install Python on Linux](https://www.scaler.com/topics/python/install-python-on-linux/)
