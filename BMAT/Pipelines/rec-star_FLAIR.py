@@ -250,6 +250,7 @@ class FlairStarTab(QWidget):
         self.action = FlairStarWorker(self.bids, self.subjects_and_sessions, flair=self.add_info.get('flair'), t2star=self.add_info.get('t2star'))
         self.action.moveToThread(self.thread)
         self.thread.started.connect(self.action.run)
+        self.action.in_progress.connect(self.is_in_progress)
         self.action.finished.connect(self.thread.quit)
         self.action.finished.connect(self.action.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
@@ -258,6 +259,10 @@ class FlairStarTab(QWidget):
         self.thread.start()
 
         self.parent.hide()
+        
+        
+    def is_in_progress(self, in_progress):
+        self.parent.parent.work_in_progress.update_work_in_progress(in_progress)
 
 
     def end_pipeline(self, last):
@@ -286,7 +291,7 @@ class FlairStarWorker(QObject):
     """
     """
     finished = pyqtSignal()
-    progress = pyqtSignal(int)
+    in_progress = pyqtSignal(tuple)
 
 
     def __init__(self, bids, subjects_and_sessions, flair='FLAIR', t2star='part-mag_T2starw'):
@@ -324,6 +329,8 @@ class FlairStarWorker(QObject):
         None.
 
         """
+        self.in_progress.emit(('rec-star_FLAIR', True))
+        
         for sub, sess in self.subjects_and_sessions:
             for ses in sess:
                 # Action
@@ -349,4 +356,6 @@ class FlairStarWorker(QObject):
                     logging.info(f'FlairStar for sub-{sub} ses-{ses} computed!')
                 except Exception as e:
                     logging.error(f'Error {e} when computing FlairStar for sub-{sub}_ses{ses}!')
+                    
+        self.in_progress.emit(('rec-star_FLAIR', False))
         self.finished.emit()

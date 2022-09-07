@@ -250,6 +250,7 @@ class PhaseUnwrappingTab(QWidget):
         self.action = PhaseUnwrappingWorker(self.bids, self.subjects_and_sessions, phase=self.add_info.get('phase'))
         self.action.moveToThread(self.thread)
         self.thread.started.connect(self.action.run)
+        self.action.in_progress.connect(self.is_in_progress)
         self.action.finished.connect(self.thread.quit)
         self.action.finished.connect(self.action.deleteLater)
         # last = (sub == self.subjects_and_sessions[-1][0] and ses == sess[-1])
@@ -258,6 +259,10 @@ class PhaseUnwrappingTab(QWidget):
         self.thread.start()
 
         self.parent.hide()
+        
+        
+    def is_in_progress(self, in_progress):
+        self.parent.parent.work_in_progress.update_work_in_progress(in_progress)
 
 
     def end_pipeline(self, last):
@@ -286,7 +291,7 @@ class PhaseUnwrappingWorker(QObject):
     """
     """
     finished = pyqtSignal()
-    progress = pyqtSignal(int)
+    in_progress = pyqtSignal(tuple)
 
 
     def __init__(self, bids, subjects_and_sessions, phase='part-phase_acq-WRAPPED_T2starw'):
@@ -323,6 +328,8 @@ class PhaseUnwrappingWorker(QObject):
         None.
 
         """
+        self.in_progress.emit(('phase_unwrapping',True))
+        
         for sub, sess in self.subjects_and_sessions:
             for ses in sess:
                 # Action
@@ -347,4 +354,6 @@ class PhaseUnwrappingWorker(QObject):
                     logging.info(f'Phase Unwrapped for sub-{sub} ses-{ses} computed!')
                 except Exception as e:
                     logging.error(f'Error {e} when Unwrapping the phase for sub-{sub}_ses{ses}!')
+                
+        self.in_progress.emit(('phase_unwrapping',False))
         self.finished.emit()

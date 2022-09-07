@@ -378,9 +378,6 @@ class BIDSHandler:
             dataset_description = { 
             	"Name": "dataset", 
             	"BIDSVersion":  "1.2.2", 
-            	"PipelineDescription": {
-            		"Name": "dataset"
-            	}
             }
             with open(pjoin(bids_dir, 'dataset_description.json'), 'w') as fp:
                 json.dump(dataset_description, fp)
@@ -394,7 +391,6 @@ class BIDSHandler:
                 for d in os.listdir(subdir):
                     if os.path.isdir(pjoin(subdir,d)):
                         dataset_description["Name"] = d
-                        dataset_description["PipelineDescription"]["Name"] = d
                         with open(pjoin(subdir, d, 'dataset_description.json'), 'w') as fp:
                             json.dump(dataset_description, fp)
                             
@@ -531,7 +527,7 @@ class BIDSHandler:
             shcopy("readme_example", 
                    pjoin(bids_dir, "README"))
         
-        print("WTF-return make_directories_from")
+        # print("WTF-return make_directories_from")
         return pat_id, session
     
 
@@ -722,14 +718,25 @@ class BIDSHandler:
                 if pexists(pjoin(path, f"{filename}{file_extension}")):
                     if pexists(pjoin(dest_dir, f"{new_filename}{file_extension}")):
                         logging.info(f'File already existing in dest dir {pjoin(dest_dir, f"{new_filename}{file_extension}")}')
-                        ext = 'a'
-                        for i in range(26):
-                            if not pexists(pjoin(dest_dir, f"{new_filename}_{ext}{file_extension}")):
-                                shutil.move(pjoin(path, f"{filename}{file_extension}"),
-                                        pjoin(dest_dir, f"{new_filename}_{ext}{file_extension}"))
-                                break
+                        new_filename_ext = new_filename
+                        while pexists(pjoin(dest_dir, f"{new_filename_ext}{file_extension}")):
+                            new_filename_details = new_filename_ext.split('_')
+                            if all(['run-' not in e for e in new_filename_details]):
+                                new_filename_details.insert(len(new_filename_details)-1, 'run-2')
+                                new_filename_ext = ''.join(e+'_' for e in new_filename_details)[:-1]
                             else:
-                                ext = chr(ord(ext)+1)
+                                run_index = ['run-' in e for e in new_filename_details].index(True)
+                                run_value = new_filename_details[run_index]
+                                run_ext = run_value.split('-')[1]
+                                new_run_ext = f'run-{int(run_ext)+1}'
+                                new_filename_details.remove(run_value)
+                                new_filename_details.insert(run_index, new_run_ext)
+                                new_filename_ext = ''.join(e+'_' for e in new_filename_details)[:-1]
+                            if not pexists(pjoin(dest_dir, f"{new_filename_ext}{file_extension}")):
+                                shutil.move(pjoin(path, f"{filename}{file_extension}"),
+                                        pjoin(dest_dir, f"{new_filename_ext}{file_extension}"))
+                                break
+                        
                     else:
                         shutil.move(pjoin(path, f"{filename}{file_extension}"),
                             pjoin(dest_dir, f"{new_filename}{file_extension}"))
@@ -922,8 +929,8 @@ class BIDSHandler:
             raise FileExistsError(msg)
     
         if not pexists(pjoin(bids_dir, f'sub-{subject}')):
-            logging.error(f"Subject {old_id} is not in the database.")
-            raise FileNotFoundError(f"Subject {old_id} is not in the database.")
+            logging.error(f"Subject {old_ses} is not in the database.")
+            raise FileNotFoundError(f"Subject {old_ses} is not in the database.")
             
         if not pexists(pjoin(bids_dir, f'sub-{subject}', f'ses-{old_ses}')):
             logging.error(f"Session {old_ses} for Subject {subject} is not in the database.")
@@ -1169,6 +1176,13 @@ class BIDSHandler:
         logging.info('done.')
 
         return pat_name, pat_date
+    
+    
+    
+    def update_dataset_description(self, dataset_description={}):
+        with open(pjoin(self.root_dir, 'dataset_description.json'), 'w') as fp:
+            json.dump(dataset_description, fp)
+    
     
 
     def update_participants_json(self, new_item):

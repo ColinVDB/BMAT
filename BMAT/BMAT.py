@@ -29,7 +29,10 @@ from PyQt5.QtCore import (QSize,
                           QProcess,
                           QAbstractTableModel,
                           pyqtProperty,
-                          QVariant)
+                          QVariant,
+                          QParallelAnimationGroup,
+                          QPropertyAnimation,
+                          QAbstractAnimation)
 from PyQt5.QtWidgets import (QDesktopWidget,
                              QApplication,
                              QWidget,
@@ -54,12 +57,20 @@ from PyQt5.QtWidgets import (QDesktopWidget,
                              QAction,
                              QTableView,
                              QAbstractScrollArea,
-                             QTabWidget)
+                             QTabWidget, 
+                             QInputDialog,
+                             QComboBox,
+                             QToolButton,
+                             QScrollArea,
+                             QSizePolicy,
+                             QFrame)
 from PyQt5.QtGui import (QFont,
                          QIcon,
                          QTextCursor,
                          QPixmap,
-                         QColor)
+                         QColor, 
+                         QMovie, 
+                         QPalette)
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import (
@@ -161,9 +172,9 @@ class MainWindow(QMainWindow):
         bids_quality.triggered.connect(self.control_bids_quality)
         self.bids_menu.addAction(bids_quality)
 
-        update_authors = QAction('&Update Authors', self)
-        update_authors.triggered.connect(self.update_authors_of_bids_directory)
-        self.bids_menu.addAction(update_authors)
+        dataset_description = QAction('&Update Dataset Description', self)
+        dataset_description.triggered.connect(self.update_dataset_description)
+        self.bids_menu.addAction(dataset_description)
 
         # add_password = QAction('&Add Password', self)
         # add_password.triggered.connect(self.add_password_to_bids)
@@ -179,13 +190,39 @@ class MainWindow(QMainWindow):
             new_action = QAction(f'&{pipe}', self)
             new_action.triggered.connect(lambda checked, arg=pipe: self.launch_pipeline(arg))
             self.PipelinesMenu.addAction(new_action)
-
+        
         for pipe in self.new_pipelines_name:
             new_action = QAction(f'&{pipe}', self)
             new_action.triggered.connect(lambda checked, arg=pipe: self.launch_pipeline(arg))
             self.PipelinesMenu.addAction(new_action)
 
         # self.threads_pool = QThreadPool.globalInstance()
+        
+        self.bids_apps = {}
+        self.bids_apps_name = []
+
+        for root, dirs, files in os.walk('BIDS_Apps'):
+            for file in files:
+                if '.json' in file:
+                    f = open(pjoin(root,file))
+                    jsn = json.load(f)
+                    self.bids_apps_name.append(jsn.get('name'))
+                    import_name = jsn.get('import_name')
+                    attr = jsn.get('attr')
+                    self.bids_apps[jsn.get('name')] = jsn
+                    self.bids_apps[jsn.get('name')]['import'] = __import__(f'BIDS_apps.{import_name}', globals(), locals(), [attr], 0)
+                    f.close()
+        
+        self.bids_apps_menu = self.menu_bar.addMenu('&BIDS-Apps')
+        
+        add_bids_apps = QAction('&Add new BIDS-Apps', self)
+        add_bids_apps.triggered.connect(self.add_new_bids_apps)
+        self.bids_apps_menu.addAction(add_bids_apps)
+        
+        for app in self.bids_apps_name:
+            new_action = QAction(f'&{app}', self)
+            new_action.triggered.connect(lambda checked, arg=app: self.launch_bids_apps(arg))
+            self.bids_apps_menu.addAction(new_action)
 
         self.init_ui()
 
@@ -215,8 +252,12 @@ class MainWindow(QMainWindow):
 
         self.bids = BIDSHandler(root_dir=self.bids_dir)
         bids_dir_split = self.bids_dir.split('/')
-        self.bids_name = bids_dir_split[len(bids_dir_split)-1]
-        self.bids_lab = QLabel(self.bids_name)
+        self.bids_name_dir = bids_dir_split[len(bids_dir_split)-1]
+        self.dataset_description = self.bids.get_dataset_description()
+        if self.dataset_description.get('Name') == None or self.dataset_description.get('Name') == '':
+            self.bids_lab = QLabel(self.bids_name_dir)
+        else:
+            self.bids_lab = QLabel(self.dataset_description.get('Name'))
         self.bids_lab.setFont(QFont('Calibri', 30))
 
         self.bids_dir_view = BidsDirView(self)
@@ -254,6 +295,8 @@ class MainWindow(QMainWindow):
         # self.nifti_viewer = DefaultNiftiViewer(self)
 
         self.viewer = DefaultViewer(self)
+        
+        self.work_in_progress = WorkInProgress(self)
 
         validator = BIDSValidator()
         if not validator.is_bids(self.bids_dir):
@@ -265,6 +308,7 @@ class MainWindow(QMainWindow):
         self.layout.addWidget(self.bids_metadata, 1, 1)
         self.layout.addWidget(self.bids_actions, 1, 2)
         self.layout.addWidget(self.viewer, 2, 1, 1, 2)
+        self.layout.addWidget(self.work_in_progress, 3, 1, 1, 2)
 
         self.window.setLayout(self.layout)
 
@@ -371,6 +415,7 @@ class MainWindow(QMainWindow):
         self.layout.addWidget(self.bids_metadata, 1, 1)
         self.layout.addWidget(self.bids_actions, 1, 2)
         self.layout.addWidget(self.viewer, 2, 1, 1, 2)
+        self.layout.addWidget(self.work_in_progress, 3, 1, 1, 2)
         self.window = QWidget(self)
         self.setCentralWidget(self.window)
         self.window.setLayout(self.layout)
@@ -495,7 +540,7 @@ class MainWindow(QMainWindow):
         self.bids_quality_controler.show()
 
 
-    def update_authors_of_bids_directory(self):
+    def update_dataset_description(self):
         """
         Update the authors of the Database
 
@@ -505,17 +550,20 @@ class MainWindow(QMainWindow):
 
         """
         logging.info("update_authors")
-        if hasattr(self, 'updateAuthors_win'):
-            del self.updateAuthors_win
-        self.updateAuthors_win = UpdateAuthors(self)
-        self.updateAuthors_win.show()
+        if hasattr(self, 'updateDatasetDescription_win'):
+            del self.updateDatasetDescription_win
+        self.updateDatasetDescription_win = UpdateDatasetDescription(self)
+        self.updateDatasetDescription_win.show()
 
 
-    def add_password_to_bids(self):
-        pass
-
-
-    def remove_password_to_bids(self):
+    def add_new_bids_apps(self):
+        if hasattr(self, 'add_new_bids_apps_win'):
+            del self.add_new_bids_apps_win
+        self.add_new_bids_apps_win = AddNewBidsApps(self)
+        self.add_new_bids_apps_win.show()
+        
+        
+    def launch_bids_apps(self):
         pass
 
 
@@ -722,6 +770,189 @@ class BIDSQualityControlWindow(QMainWindow):
         qr.moveCenter(cp)
         self.move(qr.topLeft())
 
+
+
+# =============================================================================
+# Work in Progress
+# =============================================================================
+class WorkInProgress(QWidget):
+    """
+    Representation of the BIDS directory
+    """
+
+
+    def __init__(self, parent):
+        """
+        Create an instance of the Viewer of the BIDS directory
+
+        Parameters
+        ----------
+        parent : MainWindow
+            pointer towards the main window (parent of this widget)
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+        # self.threads_pool = self.parent.threads_pool
+        self.setWindowTitle('Work in Progress')
+        self.setMinimumSize(700, 50)
+        
+        self.working_lab = QLabel(self)
+        self.working_gif = QMovie('Pictures/loading_inf.gif')
+        self.working_gif.setScaledSize(QSize(40,40))
+        # self.working_lab.setMovie(self.working_gif)
+        # self.working_gif.start()
+        
+        self.working_details_lab = QLabel(self)
+        self.working_details_lab.resize(650, 40)
+        self.working_details_lab.setAlignment(Qt.AlignLeft)
+        self.working_details_lab.setFont(QFont('Calibri', 10))
+        # self.working_details_lab.setText("Work in progress")
+        
+        self.working_details = []
+        
+        layout = QHBoxLayout()
+        layout.addWidget(self.working_lab)
+        layout.addWidget(self.working_details_lab)
+        self.setLayout(layout)
+        
+    def update_work_in_progress(self,in_progress):
+        if in_progress[1]:
+            self.working_details.append(in_progress[0])
+        else:
+            self.working_details.remove(in_progress[0])
+        self.update_animation()
+    
+    
+    def update_animation(self):
+        if self.working_details == []:
+            self.working_gif.stop()
+            self.working_lab.clear()
+            self.working_details_lab.clear()
+        else:
+            self.working_lab.setMovie(self.working_gif)
+            self.working_gif.start()
+            self.working_details_lab.setText(('['+''.join(i+',' for i in self.working_details))[:-1]+']')        
+ 
+
+
+# =============================================================================
+# AddNewBIDSApps
+# =============================================================================
+class AddNewBidsApps(QWidget):
+    """
+    Representation of the BIDS directory
+    """
+
+
+    def __init__(self, parent):
+        """
+        Create an instance of the Viewer of the BIDS directory
+
+        Parameters
+        ----------
+        parent : MainWindow
+            pointer towards the main window (parent of this widget)
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+        # self.threads_pool = self.parent.threads_pool
+        self.setWindowTitle('Add New BIDS-Apps')
+        
+        label = QLabel(self)
+        label.setText("test")
+        
+        button = QPushButton("Add New BIDS-Apps")
+        button.clicked.connect(self.add_new_bids_apps)
+        
+        layout = QVBoxLayout()
+        layout.addWidget(label)
+        layout.addWidget(button)
+        
+        self.setLayout(layout)
+        self.center()
+    
+    def add_new_bids_apps(self):
+        if hasattr(self, 'add_new_bids_apps_info_win'):
+            del self.add_new_bids_apps_info_win
+        self.add_new_bids_apps_info_win = AddNewBidsApps_info(self)
+        self.add_new_bids_apps_info_win.show()
+        
+    
+    def center(self):
+        """
+        Used to center the window
+
+        Returns
+        -------
+        None.
+
+        """
+        qr = self.frameGeometry()
+        cp = QDesktopWidget().availableGeometry().center()
+        qr.moveCenter(cp)
+        self.move(qr.topLeft())
+        
+
+
+# =============================================================================
+# AddNewBIDSApps_info
+# =============================================================================
+class AddNewBidsApps_info(QWidget):
+    """
+    Representation of the BIDS directory
+    """
+
+
+    def __init__(self, parent):
+        """
+        Create an instance of the Viewer of the BIDS directory
+
+        Parameters
+        ----------
+        parent : MainWindow
+            pointer towards the main window (parent of this widget)
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+        # self.threads_pool = self.parent.threads_pool
+        self.setWindowTitle('Add New BIDS-Apps')
+        self.setMinimumSize(700, 700)
+        
+        
+        self.center()
+        
+    def center(self):
+        """
+        Used to center the window
+
+        Returns
+        -------
+        None.
+
+        """
+        qr = self.frameGeometry()
+        cp = QDesktopWidget().availableGeometry().center()
+        qr.moveCenter(cp)
+        self.move(qr.topLeft())
+        
 
 
 
@@ -1023,11 +1254,14 @@ class BidsMetadata(QWidget):
 
         authors_lab = f"Authors: "
         authors = authors if authors != None else []
-        for author in authors:
-            if author == authors[-1]:
-                authors_lab = authors_lab + author
-            else:
-                authors_lab = authors_lab + f'{author}\n         '
+        if len(authors) <= 3:
+            for author in authors:
+                if author == authors[-1]:
+                    authors_lab = authors_lab + author
+                else:
+                    authors_lab = authors_lab + f'{author}\n            '
+        else:
+            authors_lab = authors_lab + authors[0] + ' et al.'
         self.authors = QLabel(authors_lab)
         self.authors.setFont(QFont('Calibri', 12))
         layout.addWidget(self.authors)
@@ -1050,15 +1284,21 @@ class BidsMetadata(QWidget):
         dataset_description = self.bids.get_dataset_description()
         bids_version = dataset_description.get('BIDSVersion')
         authors = dataset_description.get('Authors')
-        authors_lab = f"Authors: "
+        authors_lab = "Authors: "
         authors = authors if authors != None else []
-        for author in authors:
-            if author == authors[-1]:
-                authors_lab = authors_lab + author
-            else:
-                authors_lab = authors_lab + f'{author}\n         '
+        if len(authors) <= 3:
+            for author in authors:
+                if author == authors[-1]:
+                    authors_lab = authors_lab + author
+                else:
+                    authors_lab = authors_lab + f'{author}\n         '
+        else:
+            authors_lab = authors_lab + authors[0] + ' et al.'
         self.bids_version.setText(f"BIDSVersion: {bids_version}")
         self.authors.setText(authors_lab)
+        
+        name = dataset_description.get('Name')
+        self.parent.bids_lab.setText(name)
 
 
 
@@ -1271,10 +1511,10 @@ class BidsActions(QWidget):
 
         """
         logging.info("update_authors")
-        if hasattr(self, 'updateAuthors_win'):
-            del self.updateAuthors_win
-        self.updateAuthors_win = UpdateAuthors(self)
-        self.updateAuthors_win.show()
+        if hasattr(self, 'updateDatasetDescription_win'):
+            del self.updateDatasetDescription_win
+        self.updateDatasetDescription_win = UpdateDatasetDescription(self)
+        self.updateDatasetDescription_win.show()
 
 
     def setEnabledButtons(self, enabled):
@@ -1374,6 +1614,7 @@ class RemoveWindow(QMainWindow):
                     self.operation = OperationWorker(self.bids.delete_session, args=[subject, session], kwargs={'delete_sourcedata':True})
                     self.operation.moveToThread(self.thread)
                     self.thread.started.connect(self.operation.run)
+                    self.operation.in_progress.connect(self.is_in_progress)
                     self.operation.finished.connect(self.thread.quit)
                     self.operation.finished.connect(self.operation.deleteLater)
                     self.thread.finished.connect(self.thread.deleteLater)
@@ -1389,6 +1630,7 @@ class RemoveWindow(QMainWindow):
                     self.operation = OperationWorker(self.bids.delete_subject, args=[subject], kwargs={'delete_sourcedata':True})
                     self.operation.moveToThread(self.thread)
                     self.thread.started.connect(self.operation.run)
+                    self.operation.in_progress.connect(self.is_in_progress)
                     self.operation.finished.connect(self.thread.quit)
                     self.operation.finished.connect(self.operation.deleteLater)
                     self.thread.finished.connect(self.thread.deleteLater)
@@ -1406,6 +1648,7 @@ class RemoveWindow(QMainWindow):
                     self.operation = OperationWorker(self.bids.delete_session, args=[subject, session])
                     self.operation.moveToThread(self.thread)
                     self.thread.started.connect(self.operation.run)
+                    self.operation.in_progress.connect(self.is_in_progress)
                     self.operation.finished.connect(self.thread.quit)
                     self.operation.finished.connect(self.operation.deleteLater)
                     self.thread.finished.connect(self.thread.deleteLater)
@@ -1419,6 +1662,7 @@ class RemoveWindow(QMainWindow):
                     self.operation = OperationWorker(self.bids.delete_subject, args=[subject])
                     self.operation.moveToThread(self.thread)
                     self.thread.started.connect(self.operation.run)
+                    self.operation.in_progress.connect(self.is_in_progress)
                     self.operation.finished.connect(self.thread.quit)
                     self.operation.finished.connect(self.operation.deleteLater)
                     self.thread.finished.connect(self.thread.deleteLater)
@@ -1428,6 +1672,9 @@ class RemoveWindow(QMainWindow):
                     )
 
         self.hide()
+        
+    def is_in_progress(self, in_progress):
+        self.parent.parent.work_in_progress.update_work_in_progress(in_progress)
 
 
     def center(self):
@@ -1560,6 +1807,7 @@ class AddWindow(QMainWindow):
         self.worker = AddWorker(self.bids, self.list_to_add)
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run)
+        self.worker.in_progress.connect(self.is_in_progress)
         self.worker.finished.connect(self.thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
@@ -1567,7 +1815,11 @@ class AddWindow(QMainWindow):
         self.thread.start()
 
         self.hide()
-
+        
+    
+    def is_in_progress(self, in_progress):
+        self.parent.parent.work_in_progress.update_work_in_progress(in_progress)
+    
 
     def end_add(self):
         """
@@ -1733,6 +1985,7 @@ class RenameSubject(QMainWindow):
         self.operation = OperationWorker(self.bids.rename_subject, args=[old_sub, new_sub])
         self.operation.moveToThread(self.thread)
         self.thread.started.connect(self.operation.run)
+        self.operation.in_progress.connect(self.is_in_progress)
         self.operation.finished.connect(self.thread.quit)
         self.operation.finished.connect(self.operation.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
@@ -1743,6 +1996,10 @@ class RenameSubject(QMainWindow):
         logging.info(f"sub-{old_sub} renamed to sub-{new_sub}")
 
         self.hide()
+        
+        
+    def is_in_progress(self, in_progress):
+        self.parent.parent.parent.work_in_progress.update_work_in_progress(in_progress)
 
 
     def center(self):
@@ -1828,6 +2085,7 @@ class RenameSession(QMainWindow):
         self.operation = OperationWorker(self.bids.rename_session, args=[sub, old_ses, new_ses])
         self.operation.moveToThread(self.thread)
         self.thread.started.connect(self.operation.run)
+        self.operation.in_progress.connect(self.is_in_progress)
         self.operation.finished.connect(self.thread.quit)
         self.operation.finished.connect(self.operation.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
@@ -1838,6 +2096,10 @@ class RenameSession(QMainWindow):
         logging.info(f"ses-{old_ses} renamed to ses-{new_ses} for sub-{sub}")
 
         self.hide()
+        
+        
+    def is_in_progress(self, in_progress):
+        self.parent.parent.parent.work_in_progress.update_work_in_progress(in_progress)
 
 
     def center(self):
@@ -1919,6 +2181,7 @@ class RenameSequence(QMainWindow):
         self.operation = OperationWorker(self.bids.rename_sequence, args=[old_seq, new_seq])
         self.operation.moveToThread(self.thread)
         self.thread.started.connect(self.operation.run)
+        self.operation.in_progress.connect(self.is_in_progress)
         self.operation.finished.connect(self.thread.quit)
         self.operation.finished.connect(self.operation.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
@@ -1929,6 +2192,10 @@ class RenameSequence(QMainWindow):
         logging.info(f"old {old_seq} renamed to new {new_seq}")
 
         self.hide()
+        
+        
+    def is_in_progress(self, in_progress):
+        self.parent.parent.parent.work_in_progress.update_work_in_progress(in_progress)
 
 
     def center(self):
@@ -1946,11 +2213,10 @@ class RenameSequence(QMainWindow):
         self.move(qr.topLeft())
 
 
-
 # =============================================================================
-# UpdateAuthors
+# UpdateDatasetDescription
 # =============================================================================
-class UpdateAuthors(QMainWindow):
+class UpdateDatasetDescription(QMainWindow):
     """
     """
 
@@ -1973,25 +2239,42 @@ class UpdateAuthors(QMainWindow):
         self.parent = parent
         self.bids = self.parent.bids
         # self.threads_pool = self.parent.threads_pool
+        self.setMinimumSize(QSize(750,650))
 
-        self.setWindowTitle("Update Authors")
+        self.setWindowTitle("Update Dataset Description")
         self.window = QWidget(self)
         self.setCentralWidget(self.window)
         self.center()
+        
+        self.dataset_description = self.bids.get_dataset_description()
 
-        self.authors = QLineEdit(self)
-        self.authors.setPlaceholderText("Authors")
-        self.update_authors_button = QPushButton("Update Authors")
-        self.update_authors_button.clicked.connect(self.update_authors)
+        self.tabs = QTabWidget(self)
+        
+        self.required_tab = UpdateDatasetDescription_RequiredTab(self)
+        self.tabs.addTab(self.required_tab, "Required")
+        
+        self.recommended_tab = UpdateDatasetDescription_RecommendedTab(self)
+        scroll_area_recommended_tab = QScrollArea()
+        scroll_area_recommended_tab.setWidget(self.recommended_tab)
+        scroll_area_recommended_tab.setWidgetResizable(True)
+        scroll_area_recommended_tab.setAutoFillBackground(True)
+        scroll_area_recommended_tab.setBackgroundRole(QPalette.Base)
+        self.tabs.addTab(scroll_area_recommended_tab, "Recommended")
+        
+        self.optional_tab = UpdateDatasetDescription_OptionalTab(self)
+        self.tabs.addTab(self.optional_tab, "Optional")
 
+        self.update_dataset_description_button = QPushButton("Update Dataset Description")
+        self.update_dataset_description_button.clicked.connect(self.update_dataset_description)
+        
         layout = QVBoxLayout()
-        layout.addWidget(self.authors)
-        layout.addWidget(self.update_authors_button)
+        layout.addWidget(self.tabs)
+        layout.addWidget(self.update_dataset_description_button)
 
         self.window.setLayout(layout)
-
-
-    def update_authors(self):
+        
+        
+    def update_dataset_description(self):
         """
 
 
@@ -2000,19 +2283,17 @@ class UpdateAuthors(QMainWindow):
         None.
 
         """
-        authors = self.authors.text()
-        if ',' in authors:
-            authors_list = authors.split(',')
-        else:
-            authors_list = [authors]
+        required_dic = self.required_tab.get_values()
+        recommended_dic = self.recommended_tab.get_values()
+        optional_dic = self.optional_tab.get_values()
+        new_dataset_description = dict(required_dic, **recommended_dic, **optional_dic)
+                
         self.parent.setEnabled(False)
         self.thread = QThread()
-        self.operation = OperationWorker(self.bids.update_authors_to_dataset_description, args=[self.bids.root_dir], kwargs={'authors':authors_list})
-        logging.debug('OperationWorker instanciated')
+        self.operation = OperationWorker(self.bids.update_dataset_description, args=[], kwargs={'dataset_description':new_dataset_description})
         self.operation.moveToThread(self.thread)
-        logging.debug('OperationWorker moved to thread')
         self.thread.started.connect(self.operation.run)
-        logging.debug('Thread started and launching operation.run')
+        self.operation.in_progress.connect(self.is_in_progress)
         self.operation.finished.connect(self.thread.quit)
         self.operation.finished.connect(self.operation.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
@@ -2020,23 +2301,16 @@ class UpdateAuthors(QMainWindow):
         self.thread.finished.connect(
             lambda: self.parent.setEnabled(True)
         )
-        self.thread.finished.connect(lambda: self.end_update())
-        logging.info(f"Updating {authors} as BIDS directory authors")
-        self.parent.bids_metadata.update_metadata()
+        self.thread.finished.connect(self.update_metadata)
 
         self.hide()
+        
+        
+    def is_in_progress(self, in_progress):
+        self.parent.work_in_progress.update_work_in_progress(in_progress)
 
 
-    def end_update(self):
-        """
-
-
-        Returns
-        -------
-        None.
-
-        """
-        logging.info('Thread ended')
+    def update_metadata(self):
         self.parent.bids_metadata.update_metadata()
 
 
@@ -2053,6 +2327,683 @@ class UpdateAuthors(QMainWindow):
         cp = QDesktopWidget().availableGeometry().center()
         qr.moveCenter(cp)
         self.move(qr.topLeft())
+        
+
+
+# =============================================================================
+# UpdateDatasetDescription Required Tab
+# =============================================================================
+class UpdateDatasetDescription_RequiredTab(QWidget):
+    """
+    """
+
+
+    def __init__(self, parent):
+        """
+
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+        # self.threads_pool = self.parent.threads_pool
+        self.dataset_description = self.parent.dataset_description
+        
+        name_lab = QLabel('The name of the dataset.')
+        name_lab.setWordWrap(True)
+        self.name = QLineEdit(self)
+        if self.dataset_description.get('Name') == None or self.dataset_description.get('Name') == '':
+            self.name.setPlaceholderText(self.parent.bids_name_dir)
+        else:
+            self.name.setPlaceholderText(self.dataset_description.get('Name'))
+        
+        BIDSVersion_lab = QLabel('The version of the BIDS standard used (1.2.2 by default).')
+        BIDSVersion_lab.setWordWrap(True)
+        self.BIDSVersion = QLineEdit(self)
+        if self.dataset_description.get('BIDSVersion') == None or self.dataset_description.get('BIDSVersion') == '':
+            self.BIDSVersion.setPlaceholderText("BIDS Version of the dataset")
+        else:
+            self.BIDSVersion.setPlaceholderText(self.dataset_description.get('BIDSVersion'))
+        
+
+        layout = QVBoxLayout()
+        layout.addWidget(name_lab)
+        layout.addWidget(self.name)
+        layout.addWidget(BIDSVersion_lab)
+        layout.addWidget(self.BIDSVersion)
+
+        self.setLayout(layout)
+        
+        
+    def get_values(self):
+        required_dic = {}
+        if self.name.text() != '':
+            required_dic['Name'] = self.name.text()
+        else:
+            required_dic['Name'] = self.dataset_description.get('Name')
+        if self.BIDSVersion.text() != '':
+            required_dic['BIDSVersion'] = self.BIDSVersion.text()
+        else:
+            required_dic['BIDSVersion'] = self.dataset_description.get('BIDSVersion')
+            
+        return required_dic
+        
+        
+        
+# =============================================================================
+# UpdateDatasetDescription Recommended Tab
+# =============================================================================
+class UpdateDatasetDescription_RecommendedTab(QWidget):
+    """
+    """
+
+
+    def __init__(self, parent):
+        """
+
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+        # self.threads_pool = self.parent.threads_pool
+        self.dataset_description = self.parent.dataset_description
+        
+        HEDVersion_lab = QLabel('If HED tags are used: The version of the HED schema used to validate HED tags for study.')
+        HEDVersion_lab.setWordWrap(True)
+        self.HEDVersion = QLineEdit(self)
+        if self.dataset_description.get('HEDVersion') == None or self.dataset_description.get('HEDVersion') == '':
+            self.HEDVersion.setPlaceholderText("HEDVersion")
+        else:
+            self.HEDVersion.setPlaceholderText(self.dataset_description.get('HEDVersion'))
+        
+        dataset_type_lab = QLabel('The interpretation of the dataset. For backwards compatibility, the default value is "raw". \nMust be one of: "raw", "derivative".')
+        dataset_type_lab.setWordWrap(True)
+        self.dataset_type = "raw"
+        self.dataset_type_cb = QComboBox(self)
+        self.dataset_type_cb.addItems(["raw", "derivatives"])
+        self.dataset_type_cb.currentIndexChanged.connect(self.update_dataset_type)        
+        
+        license_lab = QLabel('The license for the dataset. The use of license name abbreviations is RECOMMENDED for specifying a license (see BIDS secification). The corresponding full license text MAY be specified in an additional LICENSE file.')
+        license_lab.setWordWrap(True)
+        self.license = QLineEdit(self)
+        if self.dataset_description.get('License') == None or self.dataset_description.get('License') == '':     
+            self.license.setPlaceholderText('License')
+        else:
+            self.license.setPlaceholderText(self.dataset_description.get('License'))
+        
+        # self.generated_by = QLineEdit(self)
+        # self.generated_by.setPlaceholderText("Generated By")
+        
+        
+        generated_by_lab = QLabel('Used to specify provenance of the dataset.')
+        generated_by_lab.setWordWrap(True)
+        self.generated_by = CollapsibleBox(parent=self, title="Generated by")
+        
+        self.generated_by_add_button = QPushButton('Add')
+        self.generated_by_add_button.clicked.connect(self.add_generated_by_widget)
+        
+        self.generated_by_layout = QVBoxLayout(self.generated_by)
+        self.generated_by_layout.addWidget(self.generated_by_add_button)
+        self.generated_by.setContentLayout(self.generated_by_layout)
+        
+        
+        # generated_by_lab = QLabel('Used to specify provenance of the dataset.')
+        # generated_by_lab.setWordWrap(True)
+        # self.generated_by = CollapsibleBox(parent=self, title="Generated by")
+        # generated_by_name_lab = QLabel('Name of the pipeline or process that generated the outputs. Use "Manual" to indicate the derivatives were generated by hand, or adjusted manually after an initial run of an automated pipeline.')
+        # generated_by_name_lab.setWordWrap(True)
+        # self.generated_by_name = "Manual"
+        # self.generated_by_name_cb = QComboBox(self)
+        # self.generated_by_name_cb.addItems(["Manual", "Automatic Pipelines", "Manual/Automatic Pipelines"])
+        # self.generated_by_name_cb.currentIndexChanged.connect(self.update_generated_by_name)
+        # generated_by_version_lab = QLabel('Version of the pipeline.')
+        # generated_by_version_lab.setWordWrap(True)
+        # self.generated_by_version = QLineEdit(self)
+        # if self.dataset_description.get('GeneratedBy') == None:
+        #     self.generated_by_version.setPlaceholderText("Version of Pipelines")
+        # elif self.dataset_description.get('GeneratedBy').get('Version') == None or self.dataset_description.get('GeneratedBy').get('Version') == '':
+        #     self.generated_by_version.setPlaceholderText("Version of Pipelines")
+        # else:
+        #     self.generated_by_version.setPlaceholderText(self.dataset_description.get('GeneratedBy').get('Version'))
+        # generated_by_description_lab = QLabel('Plain-text description of the pipeline or process that generated the outputs (Recommended if Manual).')
+        # generated_by_description_lab.setWordWrap(True)
+        # self.generated_by_description = QLineEdit(self)
+        # if self.dataset_description.get('GeneratedBy') == None:
+        #     self.generated_by_description.setPlaceholderText("Description of the process that generated outputs")
+        # elif self.dataset_description.get('GeneratedBy').get('Description') == None or self.dataset_description.get('GeneratedBy').get('Description') == '':
+        #     self.generated_by_description.setPlaceholderText("Description of the process that generated outputs")
+        # else:
+        #     self.generated_by_description.setPlaceholderText(self.dataset_description.get('GeneratedBy').get('Description'))
+        # generated_by_codeURL_lab = QLabel('URL where the code used to generate the dataset may be found.')
+        # generated_by_codeURL_lab.setWordWrap(True)
+        # self.generated_by_codeURL = QLineEdit(self)
+        # if self.dataset_description.get('GeneratedBy') == None:
+        #     self.generated_by_codeURL.setPlaceholderText("URL where the code used to generate the dataset")
+        # elif self.dataset_description.get('GeneratedBy').get('CodeURL') == None or self.dataset_description.get('GeneratedBy').get('CodeURL') == '':
+        #     self.generated_by_codeURL.setPlaceholderText("URL where the code used to generate the dataset")
+        # else:
+        #     self.generated_by_codeURL.setPlaceholderText(self.dataset_description.get('GeneratedBy').get('CodeURL'))
+        # generated_by_container_lab = QLabel('Used to specify the location and relevant attributes of software container image used to produce the dataset. ')
+        # generated_by_container_lab.setWordWrap(True)
+        # self.generated_by_container = QLineEdit(self)
+        # if self.dataset_description.get('GeneratedBy') == None:
+        #     self.generated_by_container.setPlaceholderText("Name of containers used to generate the dataset")
+        # elif self.dataset_description.get('GeneratedBy').get('Container') == None or self.dataset_description.get('GeneratedBy').get('Container') == '':
+        #     self.generated_by_container.setPlaceholderText("Name of containers used to generate the dataset")
+        # else:
+        #     self.generated_by_container.setPlaceholderText(self.dataset_description.get('GeneratedBy').get('CodeURL'))
+        # self.generated_by_layout = QVBoxLayout()
+        # self.generated_by_layout(generated_by_name_lab)
+        # self.generated_by_layout(self.generated_by_name_cb)
+        # self.generated_by_layout(generated_by_version_lab)
+        # self.generated_by_layout(self.generated_by_version)
+        # self.generated_by_layout(generated_by_description_lab)
+        # self.generated_by_layout(self.generated_by_description)
+        # self.generated_by_layout(generated_by_codeURL_lab)
+        # self.generated_by_layout(self.generated_by_codeURL)
+        # self.generated_by_layout(generated_by_container_lab)
+        # self.generated_by_layout(self.generated_by_container)
+        # self.generated_by.setContentLayout(self.generated_by_layout)
+        
+        source_datasets_lab = QLabel('Used to specify the locations and relevant attributes of all source datasets. Valid keys in each object include "URL", "DOI" (see URI), and "Version" with string values.')
+        source_datasets_lab.setWordWrap(True)
+        self.source_datasets = QLineEdit(self)
+        if self.dataset_description.get('SourceDatasets') == None or self.dataset_description.get('SourceDatasets') == '':
+            self.source_datasets.setPlaceholderText("Source Dataset")
+        else:
+            self.source_datasets.setPlaceholderText(str(self.dataset_description.get('SourceDatasets')))
+        
+        layout = QVBoxLayout()
+        layout.addWidget(HEDVersion_lab)
+        layout.addWidget(self.HEDVersion)
+        layout.addWidget(dataset_type_lab)
+        layout.addWidget(self.dataset_type_cb)
+        layout.addWidget(license_lab)
+        layout.addWidget(self.license)
+        layout.addWidget(generated_by_lab)
+        layout.addWidget(self.generated_by)
+        layout.addWidget(source_datasets_lab)
+        layout.addWidget(self.source_datasets)
+
+        self.setLayout(layout)
+        
+    
+    def update_dataset_type(self, item):
+        if item == 0:
+            self.dataset_type = "raw"
+        else:
+            self.dataset_type = "derivatives"
+            
+            
+    def add_generated_by_widget(self):
+        new_generated_by_widget = GeneratedByWidget(self)
+        self.generated_by_layout.insertWidget(0, new_generated_by_widget)
+        
+    
+    def remove_generated_by_widget(self, widget):
+        self.generated_by.removeWidget(widget)
+        widget.deleteLater()
+            
+            
+    def get_values(self):
+        recommended_dic = {}
+        if self.HEDVersion.text() != '':
+            recommended_dic['HEDVersion'] = self.HEDVersion.text()
+        else:
+            if self.dataset_description.get('HEDVersion') != None:
+                recommended_dic['HEDVersion'] = self.dataset_description.get('HEDVersion')
+        recommended_dic['DatasetType'] = self.dataset_type
+        if self.license.text() != '':
+            recommended_dic['License'] = self.license.text()
+        else:
+            if self.dataset_description.get('License') != None:
+                recommended_dic['License'] = self.dataset_description.get('License')
+        generated_by = {}
+        generated_by['Name'] = self.generated_by_name
+        if self.generated_by_version.text() != '':
+            generated_by['Version'] = self.generated_by_version.text()
+        else:
+            if self.dataset_description.get('GeneratedBy') != None:
+                if self.dataset_description.get('GeneratedBy').get('Verson') != None:
+                    generated_by['Version'] = self.dataset_description.get('GeneratedBy').get('Version')
+        if self.generated_by_description.text() != '':
+            generated_by['Description'] = self.generated_by_description.text()
+        else:
+            if self.dataset_description.get('GeneratedBy') != None:
+                if self.dataset_description.get('GeneratedBy').get('Description') != None:
+                    generated_by['Description'] = self.dataset_description.get('GeneratedBy').get('Description')
+        if self.generated_by_codeURL.text() != '':
+            generated_by['CodeURL'] = self.generated_by_codeURL.text()
+        else:
+            if self.dataset_description.get('GeneratedBy') != None:
+                if self.dataset_description.get('GeneratedBy').get('CodeURL') != None:
+                    generated_by['CodeURL'] = self.dataset_description.get('GeneratedBy').get('CodeURL')
+        if self.generated_by_container.text() != '':
+            generated_by['Container'] = self.generated_by_container.text()
+        else:
+            if self.dataset_description.get('GeneratedBy') != None:
+                generated_by['Container'] = self.dataset_description.get('GeneratedBy').get('Container')
+            else:
+                generated_by['Container'] = ''
+        recommended_dic['GeneratedBy'] = generated_by
+        if self.source_datasets.text() != '':
+            recommended_dic['SourceDatasets'] = self.source_datasets.text()
+        else:
+            recommended_dic['SourceDatasets'] = self.dataset_description.get('SourceDatasets')
+
+        return recommended_dic
+        
+
+
+# =============================================================================
+# GeneratedBy Widget
+# =============================================================================
+class GeneratedByWidget(QWidget):
+    """
+    """
+    
+    
+    def __init__(self, parent):
+        """
+        
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+        self.dataset_description = self.parent.dataset_description
+        
+        self.delete_button = QPushButton('Delete')
+        self.delete_button.clicked.connect(lambda arg=self: arg.parent.remove_generated_by_widget(arg))
+        
+        generated_by_name_lab = QLabel('Name of the pipeline or process that generated the outputs. Use "Manual" to indicate the derivatives were generated by hand, or adjusted manually after an initial run of an automated pipeline.')
+        generated_by_name_lab.setWordWrap(True)
+        self.generated_by_name = "Manual"
+        self.generated_by_name_cb = QComboBox(self)
+        self.generated_by_name_cb.addItems(["Manual", "Automatic Pipelines", "Manual/Automatic Pipelines"])
+        self.generated_by_name_cb.currentIndexChanged.connect(self.update_generated_by_name)
+        generated_by_version_lab = QLabel('Version of the pipeline.')
+        generated_by_version_lab.setWordWrap(True)
+        self.generated_by_version = QLineEdit(self)
+        if self.dataset_description.get('GeneratedBy') == None:
+            self.generated_by_version.setPlaceholderText("Version of Pipelines")
+        elif self.dataset_description.get('GeneratedBy').get('Version') == None or self.dataset_description.get('GeneratedBy').get('Version') == '':
+            self.generated_by_version.setPlaceholderText("Version of Pipelines")
+        else:
+            self.generated_by_version.setPlaceholderText(self.dataset_description.get('GeneratedBy').get('Version'))
+        generated_by_description_lab = QLabel('Plain-text description of the pipeline or process that generated the outputs (Recommended if Manual).')
+        generated_by_description_lab.setWordWrap(True)
+        self.generated_by_description = QLineEdit(self)
+        if self.dataset_description.get('GeneratedBy') == None:
+            self.generated_by_description.setPlaceholderText("Description of the process that generated outputs")
+        elif self.dataset_description.get('GeneratedBy').get('Description') == None or self.dataset_description.get('GeneratedBy').get('Description') == '':
+            self.generated_by_description.setPlaceholderText("Description of the process that generated outputs")
+        else:
+            self.generated_by_description.setPlaceholderText(self.dataset_description.get('GeneratedBy').get('Description'))
+        generated_by_codeURL_lab = QLabel('URL where the code used to generate the dataset may be found.')
+        generated_by_codeURL_lab.setWordWrap(True)
+        self.generated_by_codeURL = QLineEdit(self)
+        if self.dataset_description.get('GeneratedBy') == None:
+            self.generated_by_codeURL.setPlaceholderText("URL where the code used to generate the dataset")
+        elif self.dataset_description.get('GeneratedBy').get('CodeURL') == None or self.dataset_description.get('GeneratedBy').get('CodeURL') == '':
+            self.generated_by_codeURL.setPlaceholderText("URL where the code used to generate the dataset")
+        else:
+            self.generated_by_codeURL.setPlaceholderText(self.dataset_description.get('GeneratedBy').get('CodeURL'))
+        generated_by_container_lab = QLabel('Used to specify the location and relevant attributes of software container image used to produce the dataset. ')
+        generated_by_container_lab.setWordWrap(True)
+        self.generated_by_container = QLineEdit(self)
+        if self.dataset_description.get('GeneratedBy') == None:
+            self.generated_by_container.setPlaceholderText("Name of containers used to generate the dataset")
+        elif self.dataset_description.get('GeneratedBy').get('Container') == None or self.dataset_description.get('GeneratedBy').get('Container') == '':
+            self.generated_by_container.setPlaceholderText("Name of containers used to generate the dataset")
+        else:
+            self.generated_by_container.setPlaceholderText(self.dataset_description.get('GeneratedBy').get('CodeURL'))
+        
+        layout = QVBoxLayout()
+        layout.addWidget(self.delete_button)
+        layout.addWidget(generated_by_name_lab)
+        layout.addWidget(self.generated_by_name_cb)
+        layout.adWidget(generated_by_version_lab)
+        layout.addWidget(self.generated_by_version)
+        layout.addWidget(generated_by_description_lab)
+        layout.addWidget(self.generated_by_description)
+        layout.addWidget(generated_by_codeURL_lab)
+        layout.addWidget(self.generated_by_codeURL)
+        layout.addWidget(generated_by_container_lab)
+        layout.addWidget(self.generated_by_container)
+        
+        self.setLayout(layout)
+        
+        
+    def update_generated_by_name(self, item):
+        if item == 0:
+            self.generated_by_name = "Manual"
+        if item == 1:
+            self.generated_by_name = "Automatic Pipelines"
+        else:
+            self.generated_by_name = "Manual/Automatic Pipelines"
+        
+    
+
+# =============================================================================
+# UpdateDatasetDescription Optinal Tab
+# =============================================================================
+class UpdateDatasetDescription_OptionalTab(QWidget):
+    """
+    """
+
+
+    def __init__(self, parent):
+        """
+
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+        # self.threads_pool = self.parent.threads_pool
+        self.dataset_description = self.parent.dataset_description
+        
+        authors_lab = QLabel("List of individuals (separated by ',') who contributed to the creation/curation of the dataset.")
+        authors_lab.setWordWrap(True)
+        self.authors = QLineEdit(self)
+        if self.dataset_description.get('Authors') == None or self.dataset_description.get('Authors') == '':
+            self.authors.setPlaceholderText("Authors")
+        else:
+            self.authors.setPlaceholderText(''.join(str(author)+',' for author in self.dataset_description.get('Authors'))[:-1])
+        
+        acknowledgements_lab = QLabel('Text acknowledging contributions of individuals or institutions beyond those listed in Authors or Funding.')
+        acknowledgements_lab.setWordWrap(True)
+        self.acknowledgements = QLineEdit(self)
+        if self.dataset_description.get('Acknowledgements') == None or self.dataset_description.get('Acknowledgements') == '':
+            self.acknowledgements.setPlaceholderText("Acknowledgements")
+        else:
+            self.acknowledgements.setPlaceholderText(self.dataset_description.get('Acknowledgements'))
+        
+        how_to_acknoledge_lab = QLabel('Text containing instructions on how researchers using this dataset should acknowledge the original authors. This field can also be used to define a publication that should be cited in publications that use the dataset.')
+        how_to_acknoledge_lab.setWordWrap(True)
+        self.how_to_acknoledge = QLineEdit(self)
+        if self.dataset_description.get('HowToAcknowledge') == None or self.dataset_description.get('HowToAcknowledge') == '':
+            self.how_to_acknoledge.setPlaceholderText("How to Acknowledge")
+        else:
+            self.how_to_acknoledge.setPlaceholderText(self.dataset_description.get('HowToAcknowledge'))
+        
+        funding_lab = QLabel("List of sources of funding (grant numbers) (separated by ',').")
+        funding_lab.setWordWrap(True)
+        self.funding = QLineEdit(self)
+        if self.dataset_description.get('Funding') == None or self.dataset_description.get('Funding') == '':
+            self.funding.setPlaceholderText("Funding")
+        else:
+            self.funding.setPlaceholderText(''.join(str(author)+',' for author in self.dataset_description.get('Funding'))[:-1])
+        
+        ethics_approvals_lab = QLabel("List of ethics committee approvals (separated by ',') of the research protocols and/or protocol identifiers.")
+        ethics_approvals_lab.setWordWrap(True)
+        self.ethics_approvals = QLineEdit(self)
+        if self.dataset_description.get('EthicsApprovals') == None or self.dataset_description.get('EthicsApprovals') == '':
+            self.ethics_approvals.setPlaceholderText("Ethics Approvals")
+        else:
+            self.ethics_approvals.setPlaceholderText(''.join(str(author)+',' for author in self.dataset_description.get('EthicsApprovals'))[:-1])
+        
+        references_and_links_lab = QLabel("List of references to publications (separated by ',') that contain information on the dataset. A reference may be textual or a URI.")
+        references_and_links_lab.setWordWrap(True)
+        self.references_and_links = QLineEdit(self)
+        if self.dataset_description.get('ReferencesAndLinks') == None or self.dataset_description.get('ReferencesAndLinks') == '':
+            self.references_and_links.setPlaceholderText("References and Links")
+        else:
+            self.references_and_links.setPlaceholderText(''.join(str(author)+',' for author in self.dataset_description.get('ReferencesAndLinks'))[:-1])
+        
+        dataset_doi_lab = QLabel('The Digital Object Identifier of the dataset (not the corresponding paper).')
+        dataset_doi_lab.setWordWrap(True)
+        self.dataset_doi = QLineEdit(self)
+        if self.dataset_description.get('DatasetDOI') == None or self.dataset_description.get('DatasetDOI') == '':
+            self.dataset_doi.setPlaceholderText("Dataset DOI")
+        else:
+            self.dataset_doi.setPlaceholderText(self.dataset_description.get('DatasetDOI'))
+        
+        layout = QVBoxLayout()
+        layout.addWidget(authors_lab)
+        layout.addWidget(self.authors)
+        layout.addWidget(acknowledgements_lab)
+        layout.addWidget(self.acknowledgements)
+        layout.addWidget(how_to_acknoledge_lab)
+        layout.addWidget(self.how_to_acknoledge)
+        layout.addWidget(funding_lab)
+        layout.addWidget(self.funding)
+        layout.addWidget(ethics_approvals_lab)
+        layout.addWidget(self.ethics_approvals)
+        layout.addWidget(references_and_links_lab)
+        layout.addWidget(self.references_and_links)
+        layout.addWidget(dataset_doi_lab)
+        layout.addWidget(self.dataset_doi)
+
+        self.setLayout(layout)
+        
+        
+    def get_values(self):
+        optional_dic = {}
+        if self.authors.text() != '':
+            optional_dic['Authors'] = self.authors.text().split(',')
+        else:
+            if self.dataset_description.get('Authors') != None:
+                optional_dic['Authors'] = self.dataset_description.get('Authors')
+        if self.acknowledgements.text() != '':
+            optional_dic['Acknowledgements'] = self.acknowledgements.text()
+        else:
+            if self.dataset_description.get('Acknowledgements') != None:
+                optional_dic['Acknowledgements'] = self.dataset_description.get('Acknowledgements')
+        if self.how_to_acknoledge.text() != '':
+            optional_dic['HowToAcknowledge'] = self.how_to_acknoledge.text()
+        else:
+            if self.dataset_description.get('HowToAcknowledge') != None:
+                optional_dic['HowToAcknowledge'] = self.dataset_description.get('HowToAcknowledge')
+        if self.funding.text() != '':
+            optional_dic['Funding'] = self.funding.text().split(',')
+        else:
+            if self.dataset_description.get('Funding') != None:
+                optional_dic['Funding'] = self.dataset_description.get('Funding')
+        if self.ethics_approvals.text() != '':
+            optional_dic['EthicsApprovals'] = self.ethics_approvals.text().split(',')
+        else:
+            if self.dataset_description.get('EthicsApprovals') != None:
+                optional_dic['EthicsApprovals'] = self.dataset_description.get('EthicsApprovals')
+        if self.references_and_links.text() != '':
+            optional_dic['ReferencesAndLinks'] = self.references_and_links.text().split(',')
+        else:
+            if self.dataset_description.get('ReferencesAndLinks') != None:
+                optional_dic['ReferencesAndLinks'] = self.dataset_description.get('ReferencesAndLinks')
+        if self.dataset_doi.text() != '':
+            optional_dic['DatasetDOI'] = self.dataset_doi.text()
+        else:
+            if self.dataset_description.get('DatasetDOI') != None:
+                optional_dic['DatasetDOI'] = self.dataset_description.get('DatasetDOI')
+            
+        return optional_dic
+        
+
+
+
+# # =============================================================================
+# # UpdateDatasetDescription
+# # =============================================================================
+# class UpdateDatasetDescription(QMainWindow):
+#     """
+#     """
+
+
+#     def __init__(self, parent):
+#         """
+
+
+#         Parameters
+#         ----------
+#         parent : TYPE
+#             DESCRIPTION.
+
+#         Returns
+#         -------
+#         None.
+
+#         """
+#         super().__init__()
+#         self.parent = parent
+#         self.bids = self.parent.bids
+#         # self.threads_pool = self.parent.threads_pool
+
+#         self.setWindowTitle("Update Authors")
+#         self.window = QWidget(self)
+#         self.setCentralWidget(self.window)
+#         self.center()
+        
+#         self.name = QLineEdit(self)
+#         self.name.setPlaceholderText("Name of the dataset")
+        
+#         self.BIDSVersion = QLineEdit(self)
+#         self.BIDSVersion.setPlaceholderText("1.2.2")
+        
+#         self.HEDVersion = QLineEdit(self)
+#         self.HEDVersion.setPlaceholderText("HEDVersion")
+        
+#         self.dataset_type = QInputDialog.getItem(self, "", "Dataset Type", ['raw', 'derivatives'])
+        
+#         self.license  = QLineEdit(self)
+#         self.license.placeholderText('License')
+        
+#         self.authors = QLineEdit(self)
+#         self.authors.setPlaceholderText("Authors")
+        
+#         self.acknowledgements = QLineEdit(self)
+#         self.acknowledgements.setPlaceholderText("Acknowledgements")
+        
+#         self.how_to_acknoledge = QLineEdit(self)
+#         self.how_to_acknoledge.setPlaceholderText("How to Acknowledge")
+        
+#         self.funding = QLineEdit(self)
+#         self.funding.setPlaceholderText("Funding")
+        
+#         self.ethics_approvals = QLineEdit(self)
+#         self.ethics_approvals.setPlaceholderText("Ethics Approvals")
+        
+#         self.references_and_links = QLineEdit(self)
+#         self.references_and_links.setPlaceholderText("References and Links")
+        
+#         self.dataset_doi = QLineEdit(self)
+#         self.dataset_doi.setPlaceholderText("Dataset DOI")
+        
+#         self.generated_by = QLineEdit(self)
+#         self.generated_by.setPlaceholderText("Generated By")
+        
+#         self.source_datasets = QLineEdit(self)
+#         self.source_datasets.setPlaceholderText("Source Dataset")
+        
+#         self.update_dataset_description_button = QPushButton("Update Dataset Description")
+#         self.update_dataset_description_button.clicked.connect(self.update_dataset_description)
+
+#         layout = QVBoxLayout()
+#         layout.addWidget(self.authors)
+#         layout.addWidget(self.update_authors_button)
+
+#         self.window.setLayout(layout)
+
+
+#     def update_authors(self):
+#         """
+
+
+#         Returns
+#         -------
+#         None.
+
+#         """
+#         authors = self.authors.text()
+#         if ',' in authors:
+#             authors_list = authors.split(',')
+#         else:
+#             authors_list = [authors]
+#         self.parent.setEnabled(False)
+#         self.thread = QThread()
+#         self.operation = OperationWorker(self.bids.update_authors_to_dataset_description, args=[self.bids.root_dir], kwargs={'authors':authors_list})
+#         logging.debug('OperationWorker instanciated')
+#         self.operation.moveToThread(self.thread)
+#         logging.debug('OperationWorker moved to thread')
+#         self.thread.started.connect(self.operation.run)
+#         logging.debug('Thread started and launching operation.run')
+#         self.operation.finished.connect(self.thread.quit)
+#         self.operation.finished.connect(self.operation.deleteLater)
+#         self.thread.finished.connect(self.thread.deleteLater)
+#         self.thread.start()
+#         self.thread.finished.connect(
+#             lambda: self.parent.setEnabled(True)
+#         )
+#         self.thread.finished.connect(lambda: self.end_update())
+#         logging.info(f"Updating {authors} as BIDS directory authors")
+#         self.parent.bids_metadata.update_metadata()
+
+#         self.hide()
+
+
+#     def end_update(self):
+#         """
+
+
+#         Returns
+#         -------
+#         None.
+
+#         """
+#         logging.info('Thread ended')
+#         self.parent.bids_metadata.update_metadata()
+
+
+#     def center(self):
+#         """
+
+
+#         Returns
+#         -------
+#         None.
+
+#         """
+#         qr = self.frameGeometry()
+#         cp = QDesktopWidget().availableGeometry().center()
+#         qr.moveCenter(cp)
+#         self.move(qr.topLeft())
 
 
 # =============================================================================
@@ -2498,11 +3449,9 @@ class ParticipantsTSV_AddItem(QMainWindow):
         self.parent.setEnabled(False)
         self.thread = QThread()
         self.operation = OperationWorker(self.bids.update_participants_json, args=[new_item])
-        logging.debug('OperationWorker instanciated')
         self.operation.moveToThread(self.thread)
-        logging.debug('OperationWorker moved to thread')
         self.thread.started.connect(self.operation.run)
-        logging.debug('Thread started and launching operation.run')
+        self.operation.in_progress.connect(self.is_in_progress)
         self.operation.finished.connect(self.thread.quit)
         self.operation.finished.connect(self.operation.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
@@ -2515,6 +3464,10 @@ class ParticipantsTSV_AddItem(QMainWindow):
         # self.parent.bids_metadata.update_metadata()
 
         self.hide()
+        
+        
+    def is_in_progress(self, in_progress):
+        self.parent.parent.work_in_progress.update_work_in_progress(in_progress)
 
 
     def center(self):
@@ -2858,7 +3811,7 @@ class OperationWorker(QObject):
     """
     """
     finished = pyqtSignal()
-    progress = pyqtSignal(int)
+    in_progress = pyqtSignal(tuple)
 
 
     def __init__(self, function, args=[], kwargs={}):
@@ -2894,10 +3847,12 @@ class OperationWorker(QObject):
         None.
 
         """
+        self.in_progress.emit((self.function.__name__, True))
         try:
             self.function(*self.args, **self.kwargs)
         except Exception as e:
             pass
+        self.in_progress.emit((self.function.__name__, False))
         self.finished.emit()
 
 
@@ -2909,8 +3864,7 @@ class AddWorker(QObject):
     """
     """
     finished = pyqtSignal()
-    progress = pyqtSignal(int)
-
+    in_progress = pyqtSignal(tuple)
 
     def __init__(self, bids, list_to_add):
         """
@@ -2942,6 +3896,8 @@ class AddWorker(QObject):
         None.
 
         """
+        self.in_progress.emit(('Add', True))
+        
         for item in self.list_to_add:
 
             dicom = item[0]
@@ -2964,6 +3920,8 @@ class AddWorker(QObject):
 
             except Exception as e:
                 pass
+            
+        self.in_progress.emit(('Add',False))    
         self.finished.emit()
 
 
@@ -3071,6 +4029,90 @@ class StdTQDMTextEdit(QLineEdit):
         else:
             # we suppose that all TQDM prints have \r, so drop the rest
             pass
+
+
+
+class CollapsibleBox(QWidget):
+    def __init__(self, title="", parent=None):
+        super(CollapsibleBox, self).__init__(parent)
+
+        self.toggle_button = QToolButton(
+            text=title, checkable=True, checked=False
+        )
+        self.toggle_button.setStyleSheet("QToolButton { border: none; }")
+        self.toggle_button.setToolButtonStyle(
+            Qt.ToolButtonTextBesideIcon
+        )
+        self.toggle_button.setArrowType(Qt.RightArrow)
+        self.toggle_button.pressed.connect(self.on_pressed)
+
+        self.toggle_animation = QParallelAnimationGroup(self)
+
+        self.content_area = QScrollArea(
+            maximumHeight=0, minimumHeight=0
+        )
+        self.content_area.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Fixed
+        )
+        self.content_area.setFrameShape(QFrame.NoFrame)
+        self.content_area.setBackgroundRole(QPalette.Background)
+
+        lay = QVBoxLayout(self)
+        lay.setSpacing(0)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(self.toggle_button)
+        lay.addWidget(self.content_area)
+
+        self.toggle_animation.addAnimation(
+            QPropertyAnimation(self, b"minimumHeight")
+        )
+        self.toggle_animation.addAnimation(
+            QPropertyAnimation(self, b"maximumHeight")
+        )
+        self.toggle_animation.addAnimation(
+            QPropertyAnimation(self.content_area, b"maximumHeight")
+        )
+
+    @pyqtSlot()
+    def on_pressed(self):
+        checked = self.toggle_button.isChecked()
+        self.toggle_button.setArrowType(
+            Qt.DownArrow if not checked else Qt.RightArrow
+        )
+        self.toggle_animation.setDirection(
+            QAbstractAnimation.Forward
+            if not checked
+            else QAbstractAnimation.Backward
+        )
+        if checked:
+            self.toggle_button.setChecked(False)
+        else:
+            self.toggle_button.setChecked(True)
+        self.toggle_animation.start()
+
+    def setContentLayout(self, layout):
+        lay = self.content_area.layout()
+        del lay
+        self.content_area.setLayout(layout)
+        collapsed_height = (
+            self.sizeHint().height() - self.content_area.maximumHeight()
+        )
+        content_height = layout.sizeHint().height()
+        for i in range(self.toggle_animation.animationCount()):
+            animation = self.toggle_animation.animationAt(i)
+            animation.setDuration(500)
+            animation.setStartValue(collapsed_height)
+            animation.setEndValue(collapsed_height + content_height)
+
+        content_animation = self.toggle_animation.animationAt(
+            self.toggle_animation.animationCount() - 1
+        )
+        content_animation.setDuration(500)
+        content_animation.setStartValue(0)
+        content_animation.setEndValue(content_height)
+
+
+
 
 
 def launch_BMAT():

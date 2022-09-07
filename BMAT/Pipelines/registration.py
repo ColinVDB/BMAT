@@ -389,7 +389,7 @@ class RegistrationTab(QWidget):
             if self.ses_to_register == self.ref_ses:
                 self.name_reg = f'reg-{reg}'
             else:
-                self.name_reg = f'reg-{reg}-{self.ref_ses}'
+                self.name_reg = f'reg-{reg}{self.ref_ses}'
 
         self.registration_script()
 
@@ -417,10 +417,15 @@ class RegistrationTab(QWidget):
         self.registration = RegistrationWorker(self, self.subjects_and_sessions, same_ses)
         self.registration.moveToThread(self.thread)
         self.thread.started.connect(self.registration.run)
+        self.registration.in_progress.connect(self.is_in_progress)
         self.registration.finished.connect(self.thread.quit)
         self.registration.finished.connect(self.registration.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
         self.thread.start()
+        
+        
+    def is_in_progress(self, in_progress):
+        self.parent.parent.work_in_progress.update_work_in_progress(in_progress)
 
 
     @staticmethod
@@ -605,7 +610,7 @@ class TransformationTab(QWidget):
         self.ses_trans_matrix = sequence_no_ext.split('_')[1].split('-')[1]
         self.trans_matrix_sequence = sequence_no_ext.replace(f'sub-{self.sub_trans_matrix}_ses-{self.ses_trans_matrix}_', '')
         # find path
-        self.trans_matrix_path = path_to_trans_matrix[0:-1]
+        self.trans_matrix_path = path_to_image[0:-1]
         self.transformation_matrix_label.setText(self.trans_matrix_sequence)
 
 
@@ -678,10 +683,13 @@ class TransformationTab(QWidget):
                     self.subjects_and_sessions.append((sub,self.sessions))
 
         # find name reg
-        self.name_reg = self.trans_matrix_sequence.split('_')[-1]
-        self.name_reg = self.name_reg.replace('0GenericAffine','')
+        trans_matrix_sequence_details = self.trans_matrix_sequence.split('_')
+        reg_name_index = ['reg-' in e for e in trans_matrix_sequence_details].index(True)
+        self.name_reg = trans_matrix_sequence_details[reg_name_index]
+        # self.name_reg = self.trans_matrix_sequence.split('_')[-1]
+        # self.name_reg = self.name_reg.replace('0GenericAffine','')
 
-        self.registration_script()
+        self.transformation_script()
 
         self.parent.hide()
 
@@ -707,10 +715,15 @@ class TransformationTab(QWidget):
         self.transformation = TransformationWorker(self, self.subjects_and_sessions, same_ses)
         self.transformation.moveToThread(self.thread)
         self.thread.started.connect(self.transformation.run)
+        self.transformation.in_progress.connect(self.is_in_progress)
         self.transformation.finished.connect(self.thread.quit)
         self.transformation.finished.connect(self.transformation.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
         self.thread.start()
+        
+        
+    def is_in_progress(self, in_progress):
+        self.parent.parent.work_in_progress.update_work_in_progress(in_progress)
 
 
     @staticmethod
@@ -755,7 +768,7 @@ class RegistrationWorker(QObject):
     """
     """
     finished = pyqtSignal()
-    progress = pyqtSignal(int)
+    in_progress = pyqtSignal(tuple)
 
 
     def __init__(self, reg, subjects_and_sessions, same_ses):
@@ -795,6 +808,8 @@ class RegistrationWorker(QObject):
         None.
 
         """
+        self.in_progress.emit(('Registration', True))
+        
         for sub, sess in self.subjects_and_sessions:
             for ses in sess:
                 # Create directory
@@ -808,10 +823,12 @@ class RegistrationWorker(QObject):
                     path_to_ref_image = self.reg.rename_path_sub_ses(self.reg.ref_path,sub,ses)
                     ref_image = f'sub-{sub}_ses-{ses}_{self.reg.ref_sequence}.nii.gz'
                     path_to_registered_image = pjoin(registered_path,f'sub-{sub}',f'ses-{ses}')
-                    registered_image = f'sub-{sub}_ses-{ses}_{self.reg.sequence_to_register}_{self.reg.name_reg}'
+                    sequence_to_register_details = self.reg.sequence_to_register.split('_')
+                    sequence_to_register_details.insert(len(sequence_to_register_details)-1, self.reg.name_reg)
+                    sequence_to_register_name = ''.join(e+'_' for e in sequence_to_register_details)[:-1]
+                    registered_image = f'sub-{sub}_ses-{ses}_{sequence_to_register_name}'
                     if pexists(pjoin(path_to_image_to_register, image_to_register)) and pexists(pjoin(path_to_ref_image, ref_image)):
                         logging.info(f'Registering {image_to_register} onto {ref_image} ...')
-                        print('bruh!')
                         # subprocess.Popen(f'$ANTs_registration -d 3 -n 4 -f {ref_image} -m {image_to_register} -t r -o {registered_image}',shell=True).wait()
 
                         # subprocess.Popen(f'$ANTs_registration -d 3 -n 4 -f {path_to_ref_image}/{ref_image} -m {path_to_image_to_register}/{image_to_register} -t r -o {path_to_registered_image}/{registered_image}', shell=True).wait()
@@ -828,11 +845,17 @@ class RegistrationWorker(QObject):
 
                         if self.reg.apply_same_transformation_check.isChecked() == True:
                             logging.info(f'Applaying same transformation ...')
-                            for trans_seq, trans_path in (self.reg.trans_sequences,self.reg.trans_path_to_register):
+                            for i in range(0,len(self.reg.trans_sequences)):
+                                trans_seq = self.reg.trans_sequences[i]
+                                trans_path = self.reg.trans_path_to_register[i]
                                 path_to_trans_image_to_register = self.reg.rename_path_sub_ses(trans_path,sub,ses)
                                 trans_image_to_register = f'sub-{sub}_ses-{ses}_{trans_seq}.nii.gz'
                                 path_to_trans_registered_image = pjoin(registered_path,f'sub-{sub}',f'ses-{ses}')
-                                trans_registered_image = f'sub-{sub}_ses-{ses}_{trans_seq}_{self.reg.reg_name}'
+                                trans_sequence_to_register_details = trans_seq.split('_')
+                                trans_sequence_to_register_details.insert(len(trans_sequence_to_register_details)-1, self.reg.name_reg)
+                                trans_sequence_to_register_name = ''.join(e+'_' for e in trans_sequence_to_register_details)[:-1]
+                                trans_registered_image = f'sub-{sub}_ses-{ses}_{trans_sequence_to_register_name}'
+                                # trans_registered_image = f'sub-{sub}_ses-{ses}_{trans_seq}_{self.reg.reg_name}'
 
                                 if pexists(pjoin(path_to_trans_image_to_register, trans_image_to_register)):
                                     # subprocess.Popen('${ANTSPATH}/antsApplyTransforms -d 3 -i {trans_image_to_register} -r {ref_image} -t {registered_image}0GenericAffine.mat -n nearestNeighbor -o {trans_registered_image}.nii.gz',shell=True).wait()
@@ -849,8 +872,10 @@ class RegistrationWorker(QObject):
                     path_to_ref_image = self.reg.rename_path_sub_ses(self.reg.ref_path,sub,self.reg.ref_ses)
                     ref_image = f'sub-{sub}_ses-{self.reg.ref_ses}_{self.reg.ref_sequence}.nii.gz'
                     path_to_registered_image = pjoin(registered_path,f'sub-{sub}',f'ses-{ses}')
-                    registered_image = f'sub-{sub}_ses-{ses}_{self.reg.sequence_to_register}_{self.reg.name_reg}'
-
+                    sequence_to_register_details = self.reg.sequence_to_register.split('_')
+                    sequence_to_register_details.insert(len(sequence_to_register_details)-1, self.reg.name_reg)
+                    sequence_to_register_name = ''.join(e+'_' for e in sequence_to_register_details)[:-1]
+                    registered_image = f'sub-{sub}_ses-{ses}_{sequence_to_register_name}'
                     if pexists(pjoin(path_to_image_to_register, image_to_register)) and pexists(pjoin(path_to_ref_image, ref_image)):
                         logging.info(f'Registering {image_to_register} onto {ref_image} ...')
 
@@ -870,21 +895,28 @@ class RegistrationWorker(QObject):
 
                         if self.reg.apply_same_transformation_check.isChecked() == True:
                             logging.info(f'Applaying same transformation ...')
-                            for trans_seq, trans_path in (self.reg.trans_sequences,self.reg.trans_path_to_register):
+                            for i in range(0,len(self.reg.trans_sequences)):
+                                trans_seq = self.reg.trans_sequences[i]
+                                trans_path = self.reg.trans_path_to_register[i]
                                 path_to_trans_image_to_register = pjoin(self.reg.rename_path_sub_ses(trans_path,sub,ses))
                                 trans_image_to_register = f'sub-{sub}_ses-{ses}_{trans_seq}.nii.gz'
                                 path_to_trans_registered_image = pjoin(registered_path,f'sub-{sub}',f'ses-{ses}')
-                                trans_registered_image = f'sub-{sub}_ses-{ses}_{trans_seq}_{self.reg.reg_name}'
+                                trans_sequence_to_register_details = trans_seq.split('_')
+                                trans_sequence_to_register_details.insert(len(trans_sequence_to_register_details)-1, self.reg.name_reg)
+                                trans_sequence_to_register_name = ''.join(e+'_' for e in trans_sequence_to_register_details)[:-1]
+                                trans_registered_image = f'sub-{sub}_ses-{ses}_{trans_sequence_to_register_name}'
+                                # trans_registered_image = f'sub-{sub}_ses-{ses}_{trans_seq}_{self.reg.reg_name}'
 
                                 if pexists(pjoin(path_to_trans_image_to_register, trans_image_to_register)):
                                     # subprocess.Popen('${ANTSPATH}/antsApplyTransforms -d 3 -i {trans_image_to_register} -r {ref_image} -t {registered_image}0GenericAffine.mat -n nearestNeighbor -o {trans_registered_image}.nii.gz',shell=True).wait()
 
                                     # subprocess.Popen(f'$ANTs_applyTransforms -d 3 -i {path_to_trans_image_to_register}/{trans_image_to_register} -r {path_to_ref_image}/{ref_image} -t {path_to_trans_registered_image}/{registered_image}0GenericAffine.mat -n nearestNeighbor -o {path_to_trans_registered_image}/{trans_registered_image}.nii.gz', shell=True).wait()
                                     
-                                    subprocess.Popen(f'docker run --rm --privileged -v {path_to_trans_image_to_register}:/media/path_to_trans_image_to_register -v {path_to_ref_image}:/media/path_to_ref_image -v {path_to_trans_registered_image}:/media/path_to_trans_registered_image colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && \$ANTs_applyTransforms -d 3 -i /media/path_to_trans_image_to_register/{trans_image_to_register} -r /media/path_to_ref_image/{ref_image} -t /media/path_to_trans_registered_image/{registered_image}0GenericAffine.mat -n nearestNeighbor -o /media/path_to_trans_registered_image/{trans_registered_image}.nii.gz', shell=True).wait()
+                                    subprocess.Popen(f'docker run --rm --privileged -v {path_to_trans_image_to_register}:/media/path_to_trans_image_to_register -v {path_to_ref_image}:/media/path_to_ref_image -v {path_to_trans_registered_image}:/media/path_to_trans_registered_image colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && \$ANTs_applyTransforms -d 3 -i /media/path_to_trans_image_to_register/{trans_image_to_register} -r /media/path_to_ref_image/{ref_image} -t /media/path_to_trans_registered_image/{registered_image}0GenericAffine.mat -n nearestNeighbor -o /media/path_to_trans_registered_image/{trans_registered_image}.nii.gz"', shell=True).wait()
 
                                     # self.client.containers.run('antsx/ants', auto_remove=True, volumes=[f'{path_to_trans_image_to_register}:/data', f'{path_to_ref_image}:/media', f'{path_to_trans_registered_image}:/home'], command=f'/opt/ants/bin/antsApplyTransforms -d 3 -i /data/{trans_image_to_register} -r /media/{ref_image} -t /home/{registered_image}0GenericAffine.mat -n nearestNeighbor -o /home/{trans_registered_image}.nii.gz')
 
+        self.in_progress.emit(('Registration', False))
         self.finished.emit()
 
 
@@ -896,7 +928,7 @@ class TransformationWorker(QObject):
     """
     """
     finished = pyqtSignal()
-    progress = pyqtSignal(int)
+    in_progress = pyqtSignal(tuple)
 
 
     def __init__(self, reg, subjects_and_sessions, same_ses):
@@ -935,10 +967,12 @@ class TransformationWorker(QObject):
         None.
 
         """
+        self.in_progress.emit(('Transformation (Registration)', True))
+        
         for sub, sess in self.subjects_and_sessions:
             for ses in sess:
                 # Create directory
-                directories = [pjoin('derivatives','registrations'), pjoin('derivatives','registrations',f'{self.name_reg}'), pjoin('derivatives','registrations',f'{self.name_reg}',f'sub-{sub}'),pjoin('derivatives','registrations',f'{self.name_reg}',f'sub-{sub}',f'ses-{ses}')]
+                directories = [pjoin('derivatives','registrations'), pjoin('derivatives','registrations', f'{self.reg.name_reg}'), pjoin('derivatives','registrations',f'{self.reg.name_reg}',f'sub-{sub}'),pjoin('derivatives','registrations',f'{self.reg.name_reg}',f'sub-{sub}',f'ses-{ses}')]
                 self.reg.bids.mkdirs_if_not_exist(self.reg.bids.root_dir, directories=directories)
                 registered_path = pjoin(self.reg.bids.root_dir,'derivatives','registrations',f'{self.reg.name_reg}')
                 # Perform registration
@@ -948,7 +982,10 @@ class TransformationWorker(QObject):
                     path_to_ref_image = self.reg.rename_path_sub_ses(self.reg.ref_path,sub,ses)
                     ref_image = f'sub-{sub}_ses-{ses}_{self.reg.ref_sequence}.nii.gz'
                     path_to_registered_image = pjoin(registered_path,f'sub-{sub}',f'ses-{ses}')
-                    registered_image = f'sub-{sub}_ses-{ses}_{self.reg.sequence_to_register}_{self.reg.name_reg}'
+                    sequence_to_register_details = self.reg.sequence_to_register.split('_')
+                    sequence_to_register_details.insert(len(sequence_to_register_details)-1, self.reg.name_reg)
+                    sequence_to_register_name = ''.join(e+'_' for e in sequence_to_register_details)[:-1]
+                    registered_image = f'sub-{sub}_ses-{ses}_{sequence_to_register_name}'
                     path_to_transformation_matrix = self.reg.rename_path_sub_ses(self.reg.trans_matrix_path,sub,ses)
                     transformation_matrix = f'sub-{sub}_ses-{ses}_{self.reg.trans_matrix_sequence}.mat'
                     # logging.debug(image_to_register)
@@ -963,12 +1000,17 @@ class TransformationWorker(QObject):
 
                         # subprocess.Popen(f'$ANTs_applyTransforms -d 3 -i {path_to_image_to_register}/{image_to_register} -r {path_to_ref_image}/{ref_image} -t {path_to_transformation_matrix}/{transformation_matrix} -n nearestNeighbor -o {path_to_registered_image}/{registered_image}.nii.gz', shell=True).wait()
 
-                        subprocess.Popen(f'docker run --rm --privileged -v {path_to_image_to_register}:/media/path_to_image_to_register -v {path_to_ref_image}:/media/path_to_ref_image -v {path_to_transformation_matrix}:/media/path_to_transformation_matrix -v {path_to_registered_image}:/media/path_to_registered_image colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && \$ANTs_applyTransforms -d 3 -i /media/path_to_image_to_register/{image_to_register} -r /media/path_to_ref_image/{ref_image} -t /media/path_to_transformation_matrix/{transformation_matrix} -n nearestNeighbor -o /media/path_to_registered_image/{registered_image}.nii.gz', shell=True).wait()
+                        subprocess.Popen(f'docker run --rm --privileged -v {path_to_image_to_register}:/media/path_to_image_to_register -v {path_to_ref_image}:/media/path_to_ref_image -v {path_to_transformation_matrix}:/media/path_to_transformation_matrix -v {path_to_registered_image}:/media/path_to_registered_image colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && \$ANTs_applyTransforms -d 3 -i /media/path_to_image_to_register/{image_to_register} -r /media/path_to_ref_image/{ref_image} -t /media/path_to_transformation_matrix/{transformation_matrix} -n nearestNeighbor -o /media/path_to_registered_image/{registered_image}.nii.gz"', shell=True).wait()
 
                         # self.client.containers.run('antsx/ants', auto_remove=True, volumes=[f'{path_to_image_to_register}:/data', f'{path_to_ref_image}:/media', f'{path_to_registered_image}:/home', f'{path_to_transformation_matrix}:/mnt'], command=f'/opt/ants/bin/antsApplyTransforms -d 3 -i /data/{image_to_register} -r /media/{ref_image} -t /mnt/{transformation_matrix} -n nearestNeighbor -o /home/{registered_image}.nii.gz')
 
 
                         logging.info(f'Tranforming {image_to_register} onto {ref_image} done')
+                    else:
+                        print('[Registration] all files do not exist ...')
+                        print('image_to_register: ', pexists(pjoin(path_to_image_to_register, image_to_register)))
+                        print('ref_image: ', pexists(pjoin(path_to_ref_image, ref_image)))
+                        print('trans_matrix: ', pexists(pjoin(path_to_transformation_matrix, transformation_matrix)))
 
                 else:
                     path_to_image_to_register = self.reg.rename_path_sub_ses(self.reg.path_to_register,sub,ses)
@@ -976,7 +1018,10 @@ class TransformationWorker(QObject):
                     path_to_ref_image = self.reg.rename_path_sub_ses(self.reg.ref_path,sub,self.reg.ref_ses)
                     ref_image = f'sub-{sub}_ses-{self.reg.ref_ses}_{self.reg.ref_sequence}.nii.gz'
                     path_to_registered_image = pjoin(registered_path,f'sub-{self.sub}',f'ses-{ses}')
-                    registered_image = f'sub-{sub}_ses-{ses}_{self.reg.sequence_to_register}_{self.reg.name_reg}'
+                    sequence_to_register_details = self.reg.sequence_to_register.split('_')
+                    sequence_to_register_details.insert(len(sequence_to_register_details)-1, self.reg.name_reg)
+                    sequence_to_register_name = ''.join(e+'_' for e in sequence_to_register_details)[:-1]
+                    registered_image = f'sub-{sub}_ses-{ses}_{sequence_to_register_name}'
                     path_to_transformation_matrix = self.reg.rename_path_sub_ses(self.reg.trans_matrix_path,sub,ses)
                     transformation_matrix = f'sub-{sub}_ses-{ses}_{self.reg.trans_matrix_sequence}.mat'
                     if pexists(pjoin(path_to_image_to_register, image_to_register)) and pexists(pjoin(path_to_ref_image, ref_image)) and pexists(pjoin(path_to_transformation_matrix, transformation_matrix)):
@@ -986,9 +1031,11 @@ class TransformationWorker(QObject):
 
                         # subprocess.Popen(f'$ANTs_applyTransforms -d 3 -i {path_to_image_to_register}/{image_to_register} -r {path_to_ref_image}/{ref_image} -t {path_to_transformation_matrix}/{transformation_matrix} -n nearestNeighbor -o {path_to_registered_image}/{registered_image}.nii.gz', shell=True).wait()
                         
-                        subprocess.Popen(f'docker run --rm --privileged -v {path_to_image_to_register}:/media/path_to_image_to_register -v {path_to_ref_image}:/media/path_to_ref_image -v {path_to_transformation_matrix}:/media/path_to_transformation_matrix -v {path_to_registered_image}:/media/path_to_registered_image colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && \$ANTs_applyTransforms -d 3 -i /media/path_to_image_to_register/{image_to_register} -r /media/path_to_ref_image/{ref_image} -t /media/path_to_transformation_matrix/{transformation_matrix} -n nearestNeighbor -o /media/path_to_registered_image/{registered_image}.nii.gz', shell=True).wait()
+                        subprocess.Popen(f'docker run --rm --privileged -v {path_to_image_to_register}:/media/path_to_image_to_register -v {path_to_ref_image}:/media/path_to_ref_image -v {path_to_transformation_matrix}:/media/path_to_transformation_matrix -v {path_to_registered_image}:/media/path_to_registered_image colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && \$ANTs_applyTransforms -d 3 -i /media/path_to_image_to_register/{image_to_register} -r /media/path_to_ref_image/{ref_image} -t /media/path_to_transformation_matrix/{transformation_matrix} -n nearestNeighbor -o /media/path_to_registered_image/{registered_image}.nii.gz"', shell=True).wait()
                         
                         # self.client.containers.run('antsx/ants', auto_remove=True, volumes=[f'{path_to_image_to_register}:/data', f'{path_to_ref_image}:/media', f'{path_to_registered_image}:/home', f'{path_to_transformation_matrix}:/mnt'], command=f'/opt/ants/bin/antsApplyTransforms -d 3 -i /data/{image_to_register} -r /media/{ref_image} -t /mnt/{transformation_matrix} -n nearestNeighbor -o /home/{registered_image}.nii.gz')
 
                         logging.info(f'Transforming {image_to_register} onto {ref_image} done')
+                        
+        self.in_progress.emit(('Transformation (Registration)', False))
         self.finished.emit()
