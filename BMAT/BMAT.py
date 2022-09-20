@@ -63,7 +63,9 @@ from PyQt5.QtWidgets import (QDesktopWidget,
                              QToolButton,
                              QScrollArea,
                              QSizePolicy,
-                             QFrame)
+                             QFrame, 
+                             QGroupBox, 
+                             QSpacerItem)
 from PyQt5.QtGui import (QFont,
                          QIcon,
                          QTextCursor,
@@ -198,31 +200,31 @@ class MainWindow(QMainWindow):
 
         # self.threads_pool = QThreadPool.globalInstance()
         
-        self.bids_apps = {}
-        self.bids_apps_name = []
+        # self.bids_apps = {}
+        # self.bids_apps_name = []
 
-        for root, dirs, files in os.walk('BIDS_Apps'):
-            for file in files:
-                if '.json' in file:
-                    f = open(pjoin(root,file))
-                    jsn = json.load(f)
-                    self.bids_apps_name.append(jsn.get('name'))
-                    import_name = jsn.get('import_name')
-                    attr = jsn.get('attr')
-                    self.bids_apps[jsn.get('name')] = jsn
-                    self.bids_apps[jsn.get('name')]['import'] = __import__(f'BIDS_apps.{import_name}', globals(), locals(), [attr], 0)
-                    f.close()
+        # for root, dirs, files in os.walk('BIDS_Apps'):
+        #     for file in files:
+        #         if '.json' in file:
+        #             f = open(pjoin(root,file))
+        #             jsn = json.load(f)
+        #             self.bids_apps_name.append(jsn.get('name'))
+        #             import_name = jsn.get('import_name')
+        #             attr = jsn.get('attr')
+        #             self.bids_apps[jsn.get('name')] = jsn
+        #             self.bids_apps[jsn.get('name')]['import'] = __import__(f'BIDS_apps.{import_name}', globals(), locals(), [attr], 0)
+        #             f.close()
         
-        self.bids_apps_menu = self.menu_bar.addMenu('&BIDS-Apps')
+        # self.bids_apps_menu = self.menu_bar.addMenu('&BIDS-Apps')
         
-        add_bids_apps = QAction('&Add new BIDS-Apps', self)
-        add_bids_apps.triggered.connect(self.add_new_bids_apps)
-        self.bids_apps_menu.addAction(add_bids_apps)
+        # add_bids_apps = QAction('&Add new BIDS-Apps', self)
+        # add_bids_apps.triggered.connect(self.add_new_bids_apps)
+        # self.bids_apps_menu.addAction(add_bids_apps)
         
-        for app in self.bids_apps_name:
-            new_action = QAction(f'&{app}', self)
-            new_action.triggered.connect(lambda checked, arg=app: self.launch_bids_apps(arg))
-            self.bids_apps_menu.addAction(new_action)
+        # for app in self.bids_apps_name:
+        #     new_action = QAction(f'&{app}', self)
+        #     new_action.triggered.connect(lambda checked, arg=app: self.launch_bids_apps(arg))
+        #     self.bids_apps_menu.addAction(new_action)
 
         self.init_ui()
 
@@ -549,7 +551,6 @@ class MainWindow(QMainWindow):
         None.
 
         """
-        logging.info("update_authors")
         if hasattr(self, 'updateDatasetDescription_win'):
             del self.updateDatasetDescription_win
         self.updateDatasetDescription_win = UpdateDatasetDescription(self)
@@ -557,10 +558,11 @@ class MainWindow(QMainWindow):
 
 
     def add_new_bids_apps(self):
-        if hasattr(self, 'add_new_bids_apps_win'):
-            del self.add_new_bids_apps_win
-        self.add_new_bids_apps_win = AddNewBidsApps(self)
-        self.add_new_bids_apps_win.show()
+        pass
+        # if hasattr(self, 'add_new_bids_apps_win'):
+        #     del self.add_new_bids_apps_win
+        # self.add_new_bids_apps_win = AddNewBidsApps(self)
+        # self.add_new_bids_apps_win.show()
         
         
     def launch_bids_apps(self):
@@ -2362,7 +2364,7 @@ class UpdateDatasetDescription_RequiredTab(QWidget):
         name_lab.setWordWrap(True)
         self.name = QLineEdit(self)
         if self.dataset_description.get('Name') == None or self.dataset_description.get('Name') == '':
-            self.name.setPlaceholderText(self.parent.bids_name_dir)
+            self.name.setPlaceholderText(self.parent.parent.bids_name_dir)
         else:
             self.name.setPlaceholderText(self.dataset_description.get('Name'))
         
@@ -2373,13 +2375,15 @@ class UpdateDatasetDescription_RequiredTab(QWidget):
             self.BIDSVersion.setPlaceholderText("BIDS Version of the dataset")
         else:
             self.BIDSVersion.setPlaceholderText(self.dataset_description.get('BIDSVersion'))
-        
+            
+        vertical_spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)        
 
         layout = QVBoxLayout()
         layout.addWidget(name_lab)
         layout.addWidget(self.name)
         layout.addWidget(BIDSVersion_lab)
         layout.addWidget(self.BIDSVersion)
+        layout.addItem(vertical_spacer)
 
         self.setLayout(layout)
         
@@ -2389,7 +2393,10 @@ class UpdateDatasetDescription_RequiredTab(QWidget):
         if self.name.text() != '':
             required_dic['Name'] = self.name.text()
         else:
-            required_dic['Name'] = self.dataset_description.get('Name')
+            if self.dataset_description.get('Name') == None or self.dataset_description.get('Name') == '':
+                required_dic['Name'] = self.parent.parent.bids_name_dir
+            else:
+                required_dic['Name'] = self.dataset_description.get('Name')
         if self.BIDSVersion.text() != '':
             required_dic['BIDSVersion'] = self.BIDSVersion.text()
         else:
@@ -2426,7 +2433,7 @@ class UpdateDatasetDescription_RecommendedTab(QWidget):
         self.bids = self.parent.bids
         # self.threads_pool = self.parent.threads_pool
         self.dataset_description = self.parent.dataset_description
-        
+                
         HEDVersion_lab = QLabel('If HED tags are used: The version of the HED schema used to validate HED tags for study.')
         HEDVersion_lab.setWordWrap(True)
         self.HEDVersion = QLineEdit(self)
@@ -2449,88 +2456,68 @@ class UpdateDatasetDescription_RecommendedTab(QWidget):
             self.license.setPlaceholderText('License')
         else:
             self.license.setPlaceholderText(self.dataset_description.get('License'))
-        
-        # self.generated_by = QLineEdit(self)
-        # self.generated_by.setPlaceholderText("Generated By")
-        
-        
+       
         generated_by_lab = QLabel('Used to specify provenance of the dataset.')
         generated_by_lab.setWordWrap(True)
-        self.generated_by = CollapsibleBox(parent=self, title="Generated by")
         
-        self.generated_by_add_button = QPushButton('Add')
-        self.generated_by_add_button.clicked.connect(self.add_generated_by_widget)
-        
-        self.generated_by_layout = QVBoxLayout(self.generated_by)
-        self.generated_by_layout.addWidget(self.generated_by_add_button)
-        self.generated_by.setContentLayout(self.generated_by_layout)
-        
-        
-        # generated_by_lab = QLabel('Used to specify provenance of the dataset.')
-        # generated_by_lab.setWordWrap(True)
-        # self.generated_by = CollapsibleBox(parent=self, title="Generated by")
-        # generated_by_name_lab = QLabel('Name of the pipeline or process that generated the outputs. Use "Manual" to indicate the derivatives were generated by hand, or adjusted manually after an initial run of an automated pipeline.')
-        # generated_by_name_lab.setWordWrap(True)
-        # self.generated_by_name = "Manual"
-        # self.generated_by_name_cb = QComboBox(self)
-        # self.generated_by_name_cb.addItems(["Manual", "Automatic Pipelines", "Manual/Automatic Pipelines"])
-        # self.generated_by_name_cb.currentIndexChanged.connect(self.update_generated_by_name)
-        # generated_by_version_lab = QLabel('Version of the pipeline.')
-        # generated_by_version_lab.setWordWrap(True)
-        # self.generated_by_version = QLineEdit(self)
-        # if self.dataset_description.get('GeneratedBy') == None:
-        #     self.generated_by_version.setPlaceholderText("Version of Pipelines")
-        # elif self.dataset_description.get('GeneratedBy').get('Version') == None or self.dataset_description.get('GeneratedBy').get('Version') == '':
-        #     self.generated_by_version.setPlaceholderText("Version of Pipelines")
-        # else:
-        #     self.generated_by_version.setPlaceholderText(self.dataset_description.get('GeneratedBy').get('Version'))
-        # generated_by_description_lab = QLabel('Plain-text description of the pipeline or process that generated the outputs (Recommended if Manual).')
-        # generated_by_description_lab.setWordWrap(True)
-        # self.generated_by_description = QLineEdit(self)
-        # if self.dataset_description.get('GeneratedBy') == None:
-        #     self.generated_by_description.setPlaceholderText("Description of the process that generated outputs")
-        # elif self.dataset_description.get('GeneratedBy').get('Description') == None or self.dataset_description.get('GeneratedBy').get('Description') == '':
-        #     self.generated_by_description.setPlaceholderText("Description of the process that generated outputs")
-        # else:
-        #     self.generated_by_description.setPlaceholderText(self.dataset_description.get('GeneratedBy').get('Description'))
-        # generated_by_codeURL_lab = QLabel('URL where the code used to generate the dataset may be found.')
-        # generated_by_codeURL_lab.setWordWrap(True)
-        # self.generated_by_codeURL = QLineEdit(self)
-        # if self.dataset_description.get('GeneratedBy') == None:
-        #     self.generated_by_codeURL.setPlaceholderText("URL where the code used to generate the dataset")
-        # elif self.dataset_description.get('GeneratedBy').get('CodeURL') == None or self.dataset_description.get('GeneratedBy').get('CodeURL') == '':
-        #     self.generated_by_codeURL.setPlaceholderText("URL where the code used to generate the dataset")
-        # else:
-        #     self.generated_by_codeURL.setPlaceholderText(self.dataset_description.get('GeneratedBy').get('CodeURL'))
-        # generated_by_container_lab = QLabel('Used to specify the location and relevant attributes of software container image used to produce the dataset. ')
-        # generated_by_container_lab.setWordWrap(True)
-        # self.generated_by_container = QLineEdit(self)
-        # if self.dataset_description.get('GeneratedBy') == None:
-        #     self.generated_by_container.setPlaceholderText("Name of containers used to generate the dataset")
-        # elif self.dataset_description.get('GeneratedBy').get('Container') == None or self.dataset_description.get('GeneratedBy').get('Container') == '':
-        #     self.generated_by_container.setPlaceholderText("Name of containers used to generate the dataset")
-        # else:
-        #     self.generated_by_container.setPlaceholderText(self.dataset_description.get('GeneratedBy').get('CodeURL'))
-        # self.generated_by_layout = QVBoxLayout()
-        # self.generated_by_layout(generated_by_name_lab)
-        # self.generated_by_layout(self.generated_by_name_cb)
-        # self.generated_by_layout(generated_by_version_lab)
-        # self.generated_by_layout(self.generated_by_version)
-        # self.generated_by_layout(generated_by_description_lab)
-        # self.generated_by_layout(self.generated_by_description)
-        # self.generated_by_layout(generated_by_codeURL_lab)
-        # self.generated_by_layout(self.generated_by_codeURL)
-        # self.generated_by_layout(generated_by_container_lab)
-        # self.generated_by_layout(self.generated_by_container)
-        # self.generated_by.setContentLayout(self.generated_by_layout)
-        
-        source_datasets_lab = QLabel('Used to specify the locations and relevant attributes of all source datasets. Valid keys in each object include "URL", "DOI" (see URI), and "Version" with string values.')
-        source_datasets_lab.setWordWrap(True)
-        self.source_datasets = QLineEdit(self)
-        if self.dataset_description.get('SourceDatasets') == None or self.dataset_description.get('SourceDatasets') == '':
-            self.source_datasets.setPlaceholderText("Source Dataset")
+        if self.dataset_description.get('GeneratedBy') == None or self.dataset_description.get('GeneratedBy') == "":
+            self.generated_by = [{}]
         else:
-            self.source_datasets.setPlaceholderText(str(self.dataset_description.get('SourceDatasets')))
+            self.generated_by = self.dataset_description.get('GeneratedBy')
+        
+        generated_by_sa = QScrollArea()
+        generated_by_sa.setWidgetResizable(True)
+        generated_by_sa.setFixedHeight(300)
+        generated_by_sa.setAutoFillBackground(True)
+        generated_by_sa.setBackgroundRole(QPalette.Background)   
+        
+        generated_by_gb = QGroupBox()
+        generated_by_gb.setBackgroundRole(QPalette.Background)
+        self.generated_by_add_button = QPushButton('Add')
+        self.generated_by_add_button.clicked.connect(lambda :self.add_generated_by_widget(dic={}))
+        
+        self.generated_by_layout = QVBoxLayout()
+        
+        for item in self.generated_by:
+            self.add_generated_by_widget(dic=item)
+            
+        self.generated_by_layout.addWidget(self.generated_by_add_button)
+            
+        generated_by_gb.setLayout(self.generated_by_layout)
+        
+        generated_by_sa.setWidget(generated_by_gb)
+        
+        source_datasets_lab = QLabel('Used to specify provenance of the dataset.')
+        source_datasets_lab.setWordWrap(True)
+        
+        if self.dataset_description.get('SourceDatasets') == None or self.dataset_description.get('SourceDatasets') == "":
+            self.source_datasets = [{}]
+        else:
+            self.source_datasets = self.dataset_description.get('SourceDatasets')
+        
+        source_datasets_sa = QScrollArea()
+        source_datasets_sa.setWidgetResizable(True)
+        source_datasets_sa.setFixedHeight(300)
+        source_datasets_sa.setAutoFillBackground(True)
+        source_datasets_sa.setBackgroundRole(QPalette.Background)   
+        
+        source_datasets_gb = QGroupBox()
+        source_datasets_gb.setBackgroundRole(QPalette.Background)
+        self.source_datasets_add_button = QPushButton('Add')
+        self.source_datasets_add_button.clicked.connect(lambda :self.add_source_datasets_widget(dic={}))
+        
+        self.source_datasets_layout = QVBoxLayout()
+        
+        for item in self.source_datasets:
+            self.add_source_datasets_widget(dic=item)
+            
+        self.source_datasets_layout.addWidget(self.source_datasets_add_button)
+            
+        source_datasets_gb.setLayout(self.source_datasets_layout)
+        
+        source_datasets_sa.setWidget(source_datasets_gb)
+        
+        vertical_spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)  
         
         layout = QVBoxLayout()
         layout.addWidget(HEDVersion_lab)
@@ -2540,9 +2527,10 @@ class UpdateDatasetDescription_RecommendedTab(QWidget):
         layout.addWidget(license_lab)
         layout.addWidget(self.license)
         layout.addWidget(generated_by_lab)
-        layout.addWidget(self.generated_by)
+        layout.addWidget(generated_by_sa)
         layout.addWidget(source_datasets_lab)
-        layout.addWidget(self.source_datasets)
+        layout.addWidget(source_datasets_sa)
+        layout.addItem(vertical_spacer)
 
         self.setLayout(layout)
         
@@ -2554,13 +2542,23 @@ class UpdateDatasetDescription_RecommendedTab(QWidget):
             self.dataset_type = "derivatives"
             
             
-    def add_generated_by_widget(self):
-        new_generated_by_widget = GeneratedByWidget(self)
-        self.generated_by_layout.insertWidget(0, new_generated_by_widget)
+    def add_generated_by_widget(self, dic={}):
+        new_generated_by_widget = GeneratedByWidget(self, dic=dic)
+        self.generated_by_layout.insertWidget(self.generated_by_layout.count()-1, new_generated_by_widget)
         
     
     def remove_generated_by_widget(self, widget):
-        self.generated_by.removeWidget(widget)
+        self.generated_by_layout.removeWidget(widget)
+        widget.deleteLater()
+        
+        
+    def add_source_datasets_widget(self, dic={}):
+        new_source_dataset = SourceDatasetWidget(self, dic=dic)
+        self.source_datasets_layout.insertWidget(self.source_datasets_layout.count()-1, new_source_dataset)
+        
+        
+    def remove_source_datasets_widget(self, widget):
+        self.source_datasets_layout.removeWidget(widget)
         widget.deleteLater()
             
             
@@ -2577,38 +2575,20 @@ class UpdateDatasetDescription_RecommendedTab(QWidget):
         else:
             if self.dataset_description.get('License') != None:
                 recommended_dic['License'] = self.dataset_description.get('License')
-        generated_by = {}
-        generated_by['Name'] = self.generated_by_name
-        if self.generated_by_version.text() != '':
-            generated_by['Version'] = self.generated_by_version.text()
-        else:
-            if self.dataset_description.get('GeneratedBy') != None:
-                if self.dataset_description.get('GeneratedBy').get('Verson') != None:
-                    generated_by['Version'] = self.dataset_description.get('GeneratedBy').get('Version')
-        if self.generated_by_description.text() != '':
-            generated_by['Description'] = self.generated_by_description.text()
-        else:
-            if self.dataset_description.get('GeneratedBy') != None:
-                if self.dataset_description.get('GeneratedBy').get('Description') != None:
-                    generated_by['Description'] = self.dataset_description.get('GeneratedBy').get('Description')
-        if self.generated_by_codeURL.text() != '':
-            generated_by['CodeURL'] = self.generated_by_codeURL.text()
-        else:
-            if self.dataset_description.get('GeneratedBy') != None:
-                if self.dataset_description.get('GeneratedBy').get('CodeURL') != None:
-                    generated_by['CodeURL'] = self.dataset_description.get('GeneratedBy').get('CodeURL')
-        if self.generated_by_container.text() != '':
-            generated_by['Container'] = self.generated_by_container.text()
-        else:
-            if self.dataset_description.get('GeneratedBy') != None:
-                generated_by['Container'] = self.dataset_description.get('GeneratedBy').get('Container')
-            else:
-                generated_by['Container'] = ''
+                
+        generated_by = []
+        for i in range(self.generated_by_layout.count()-1):
+            widget = self.generated_by_layout.itemAt(i).widget()
+            generated_by.append(widget.get_values())
+            
         recommended_dic['GeneratedBy'] = generated_by
-        if self.source_datasets.text() != '':
-            recommended_dic['SourceDatasets'] = self.source_datasets.text()
-        else:
-            recommended_dic['SourceDatasets'] = self.dataset_description.get('SourceDatasets')
+        
+        source_datasets = []
+        for i in range(self.source_datasets_layout.count()-1):
+            widget = self.source_datasets_layout.itemAt(i).widget()
+            source_datasets.append(widget.get_values())
+            
+        recommended_dic['SourceDatasets'] = source_datasets
 
         return recommended_dic
         
@@ -2622,7 +2602,7 @@ class GeneratedByWidget(QWidget):
     """
     
     
-    def __init__(self, parent):
+    def __init__(self, parent, dic={}):
         """
         
 
@@ -2640,78 +2620,225 @@ class GeneratedByWidget(QWidget):
         self.parent = parent
         self.bids = self.parent.bids
         self.dataset_description = self.parent.dataset_description
+        self.dic = dic
         
         self.delete_button = QPushButton('Delete')
-        self.delete_button.clicked.connect(lambda arg=self: arg.parent.remove_generated_by_widget(arg))
+        self.delete_button.clicked.connect(lambda : self.parent.remove_generated_by_widget(self))
         
         generated_by_name_lab = QLabel('Name of the pipeline or process that generated the outputs. Use "Manual" to indicate the derivatives were generated by hand, or adjusted manually after an initial run of an automated pipeline.')
         generated_by_name_lab.setWordWrap(True)
-        self.generated_by_name = "Manual"
-        self.generated_by_name_cb = QComboBox(self)
-        self.generated_by_name_cb.addItems(["Manual", "Automatic Pipelines", "Manual/Automatic Pipelines"])
-        self.generated_by_name_cb.currentIndexChanged.connect(self.update_generated_by_name)
+        self.generated_by_name = QLineEdit(self)
+        if self.dic.get('Name') == None or self.dic.get('Name') == "":
+            self.generated_by_name.setPlaceholderText("Name of the pipeline or process")
+        else:
+            self.generated_by_name.setPlaceholderText(self.dic.get('Name'))
         generated_by_version_lab = QLabel('Version of the pipeline.')
         generated_by_version_lab.setWordWrap(True)
         self.generated_by_version = QLineEdit(self)
-        if self.dataset_description.get('GeneratedBy') == None:
-            self.generated_by_version.setPlaceholderText("Version of Pipelines")
-        elif self.dataset_description.get('GeneratedBy').get('Version') == None or self.dataset_description.get('GeneratedBy').get('Version') == '':
+        if self.dic.get('Version') == None or self.dic.get('Version') == "":
             self.generated_by_version.setPlaceholderText("Version of Pipelines")
         else:
-            self.generated_by_version.setPlaceholderText(self.dataset_description.get('GeneratedBy').get('Version'))
+            self.generated_by_version.setPlaceholderText(self.dic.get('Version'))
         generated_by_description_lab = QLabel('Plain-text description of the pipeline or process that generated the outputs (Recommended if Manual).')
         generated_by_description_lab.setWordWrap(True)
         self.generated_by_description = QLineEdit(self)
-        if self.dataset_description.get('GeneratedBy') == None:
-            self.generated_by_description.setPlaceholderText("Description of the process that generated outputs")
-        elif self.dataset_description.get('GeneratedBy').get('Description') == None or self.dataset_description.get('GeneratedBy').get('Description') == '':
+        if self.dic.get('Description') == None or self.dic.get('Description') == "":
             self.generated_by_description.setPlaceholderText("Description of the process that generated outputs")
         else:
-            self.generated_by_description.setPlaceholderText(self.dataset_description.get('GeneratedBy').get('Description'))
+            self.generated_by_description.setPlaceholderText(self.dic.get('Description'))
         generated_by_codeURL_lab = QLabel('URL where the code used to generate the dataset may be found.')
         generated_by_codeURL_lab.setWordWrap(True)
         self.generated_by_codeURL = QLineEdit(self)
-        if self.dataset_description.get('GeneratedBy') == None:
-            self.generated_by_codeURL.setPlaceholderText("URL where the code used to generate the dataset")
-        elif self.dataset_description.get('GeneratedBy').get('CodeURL') == None or self.dataset_description.get('GeneratedBy').get('CodeURL') == '':
+        if self.dic.get('CodeURL') == None or self.dic.get('CodeURL') == "":
             self.generated_by_codeURL.setPlaceholderText("URL where the code used to generate the dataset")
         else:
-            self.generated_by_codeURL.setPlaceholderText(self.dataset_description.get('GeneratedBy').get('CodeURL'))
+            self.generated_by_codeURL.setPlaceholderText(self.dic.get('CodeURL'))
         generated_by_container_lab = QLabel('Used to specify the location and relevant attributes of software container image used to produce the dataset. ')
         generated_by_container_lab.setWordWrap(True)
-        self.generated_by_container = QLineEdit(self)
-        if self.dataset_description.get('GeneratedBy') == None:
-            self.generated_by_container.setPlaceholderText("Name of containers used to generate the dataset")
-        elif self.dataset_description.get('GeneratedBy').get('Container') == None or self.dataset_description.get('GeneratedBy').get('Container') == '':
-            self.generated_by_container.setPlaceholderText("Name of containers used to generate the dataset")
+        self.generated_by_container_widget = CollapsibleBox(parent=self, title='Container')
+        if self.dic.get('Container') == None or self.dic.get('Container') == "":
+            self.generated_by_container = {}
         else:
-            self.generated_by_container.setPlaceholderText(self.dataset_description.get('GeneratedBy').get('CodeURL'))
+            self.generated_by_container = self.dic.get('Container')
+        generated_by_container_type_lab = QLabel('Type of the Container.')
+        self.generated_by_container_type = QLineEdit(self)
+        if self.generated_by_container.get('Type') == None or self.generated_by_container.get('Type') == "":
+            self.generated_by_container_type.setPlaceholderText("Type of the Container")
+        else:
+            self.generated_by_container_type.setPlaceholderText(self.generated_by_container.get('Type'))
+        generated_by_container_tag_lab = QLabel("Tag of the Container")
+        self.generated_by_container_tag = QLineEdit(self)
+        if self.generated_by_container.get('Tag') == None or self.generated_by_container.get('Tag') == "":
+            self.generated_by_container_type.setPlaceholderText("Tag of the Container")
+        else:
+            self.generated_by_container_type.setPlaceholderText(self.generated_by_container.get('Tag'))
+        generated_by_container_uri_lab = QLabel("URI of the Container")
+        self.generated_by_container_uri = QLineEdit(self)
+        if self.generated_by_container.get('URI') == None or self.generated_by_container.get('URI') == "":
+            self.generated_by_container_type.setPlaceholderText("URI of the Container")
+        else:
+            self.generated_by_container_type.setPlaceholderText(self.generated_by_container.get('URI'))
+        container_layout = QVBoxLayout()
+        container_layout.addWidget(generated_by_container_tag_lab)
+        container_layout.addWidget(self.generated_by_container_tag)
+        container_layout.addWidget(generated_by_container_type_lab)
+        container_layout.addWidget(self.generated_by_container_type)
+        container_layout.addWidget(generated_by_container_uri_lab)
+        container_layout.addWidget(self.generated_by_container_uri)
+        self.generated_by_container_widget.setContentLayout(container_layout)
+        
         
         layout = QVBoxLayout()
         layout.addWidget(self.delete_button)
         layout.addWidget(generated_by_name_lab)
-        layout.addWidget(self.generated_by_name_cb)
-        layout.adWidget(generated_by_version_lab)
+        layout.addWidget(self.generated_by_name)
+        layout.addWidget(generated_by_version_lab)
         layout.addWidget(self.generated_by_version)
         layout.addWidget(generated_by_description_lab)
         layout.addWidget(self.generated_by_description)
         layout.addWidget(generated_by_codeURL_lab)
         layout.addWidget(self.generated_by_codeURL)
         layout.addWidget(generated_by_container_lab)
-        layout.addWidget(self.generated_by_container)
+        layout.addWidget(self.generated_by_container_widget)
+        
+        self.setLayout(layout)
+            
+    
+    def get_values(self):
+        return_dic = {}
+        
+        if self.generated_by_name.text() != "":
+            return_dic['Name'] = self.generated_by_name.text()
+        else:
+            return_dic['Name'] = self.dic.get('Name')
+            
+        if self.generated_by_version.text() != "":
+            return_dic['Version'] = self.generated_by_version.text()
+        else:
+            return_dic['Version'] = self.dic.get('Version')
+            
+        if self.generated_by_description.text() != "":
+            return_dic['Description'] = self.generated_by_description.text()
+        else:
+            return_dic['Description'] = self.dic.get('Description')
+            
+        if self.generated_by_codeURL.text() != "":
+            return_dic['CodeURL'] = self.generated_by_codeURL.text()
+        else:
+            return_dic['CodeURL'] = self.dic.get('CodeURL')
+            
+        container_dic = {}
+        
+        if self.generated_by_container_type.text() != "":
+            container_dic['Type'] = self.generated_by_container_type.text()
+        else:
+            container_dic['Type'] = self.generated_by_container.get('Type')
+            
+        if self.generated_by_container_tag.text() != "":
+            container_dic['Tag'] = self.generated_by_container_tag.text()
+        else:
+            container_dic['Tag'] = self.generated_by_container.get('Tag')
+            
+        if self.generated_by_container_uri.text() != "":
+            container_dic['URI'] = self.generated_by_container_uri.text()
+        else:
+            container_dic['URI'] = self.generated_by_container.get('URI')
+            
+        return_dic['Container'] = container_dic
+        
+        return return_dic
+            
+        
+        
+        
+        
+        
+# =============================================================================
+# SourceDatasetWidget
+# =============================================================================
+class SourceDatasetWidget(QWidget):
+    """
+    """
+    
+    def __init__(self, parent, dic={}):
+        """
+        
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+        self.dataset_description = self.parent.dataset_description
+        self.dic = dic
+
+        self.delete_button = QPushButton('Delete')
+        self.delete_button.clicked.connect(lambda : self.parent.remove_source_datasets_widget(self))
+        
+        url_lab = QLabel('URL of source dataset')
+        url_lab.setWordWrap(True)
+        self.url = QLineEdit(self)
+        if self.dic.get('URL') == None or self.dic.get('URL') == "":
+            self.url.setPlaceholderText("URL")
+        else:
+            self.url.setPlaceholderText(self.dic.get('URL'))
+            
+        doi_lab = QLabel('DOI of source dataset')
+        doi_lab.setWordWrap(True)
+        self.doi = QLineEdit(self)
+        if self.dic.get('DOI') == None or self.dic.get('DOI') == "":
+            self.doi.setPlaceholderText("DOI")
+        else:
+            self.doi.setPlaceholderText(self.dic.get('DOI'))
+            
+        version_lab = QLabel('Version of source dataset')
+        version_lab.setWordWrap(True)
+        self.version = QLineEdit(self)
+        if self.dic.get('Version') == None or self.dic.get('Version') == "":
+            self.version.setPlaceholderText("Version")
+        else:
+            self.version.setPlaceholderText(self.dic.get('Version'))
+            
+        layout = QVBoxLayout()
+        layout.addWidget(self.delete_button)
+        layout.addWidget(url_lab)
+        layout.addWidget(self.url)
+        layout.addWidget(doi_lab)
+        layout.addWidget(self.doi)
+        layout.addWidget(version_lab)
+        layout.addWidget(self.version)
         
         self.setLayout(layout)
         
         
-    def update_generated_by_name(self, item):
-        if item == 0:
-            self.generated_by_name = "Manual"
-        if item == 1:
-            self.generated_by_name = "Automatic Pipelines"
-        else:
-            self.generated_by_name = "Manual/Automatic Pipelines"
+    def get_values(self):
+        return_dic = {}
         
-    
+        if self.url.text() != "":
+            return_dic['URL'] = self.url.text()
+        else:
+            return_dic['URL'] = self.dic.get('URL')
+            
+        if self.doi.text() != "":
+            return_dic['DOI'] = self.doi.text()
+        else:
+            return_dic['DOI'] = self.dic.get('DOI')
+            
+        if self.version.text() != "":
+            return_dic['Version'] = self.version.text()
+        else:
+            return_dic['Version'] = self.dic.get('Version')
+        
+        return return_dic
+        
 
 # =============================================================================
 # UpdateDatasetDescription Optinal Tab
@@ -2797,6 +2924,8 @@ class UpdateDatasetDescription_OptionalTab(QWidget):
         else:
             self.dataset_doi.setPlaceholderText(self.dataset_description.get('DatasetDOI'))
         
+        vertical_spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)  
+        
         layout = QVBoxLayout()
         layout.addWidget(authors_lab)
         layout.addWidget(self.authors)
@@ -2812,6 +2941,7 @@ class UpdateDatasetDescription_OptionalTab(QWidget):
         layout.addWidget(self.references_and_links)
         layout.addWidget(dataset_doi_lab)
         layout.addWidget(self.dataset_doi)
+        layout.addItem(vertical_spacer)
 
         self.setLayout(layout)
         
@@ -4052,7 +4182,7 @@ class CollapsibleBox(QWidget):
             maximumHeight=0, minimumHeight=0
         )
         self.content_area.setSizePolicy(
-            QSizePolicy.Expanding, QSizePolicy.Fixed
+            QSizePolicy.Expanding, QSizePolicy.Expanding
         )
         self.content_area.setFrameShape(QFrame.NoFrame)
         self.content_area.setBackgroundRole(QPalette.Background)
