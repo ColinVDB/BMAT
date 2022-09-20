@@ -180,6 +180,7 @@ The next section will show how to use this software
 ## Utilization
 
 This section aims to explain how to use BMAT. 
+You can find a little tutorial video [here](https://youtu.be/vsiRZ4xLT-o).
 
 ### Open/Create new BIDS
 
