@@ -15,7 +15,6 @@ import os
 from os.path import join as pjoin
 from os.path import exists as pexists
 from dicom2bids import *
-from pipeline_repository_readme import get_readme_widget
 import logging
 from PyQt5.QtCore import (QSize,
                           Qt,
