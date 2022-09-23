@@ -15,6 +15,7 @@ import os
 from os.path import join as pjoin
 from os.path import exists as pexists
 from dicom2bids import *
+from pipeline_repository_readme import get_readme_widget
 import logging
 from PyQt5.QtCore import (QSize,
                           Qt,
@@ -32,7 +33,11 @@ from PyQt5.QtCore import (QSize,
                           QVariant,
                           QParallelAnimationGroup,
                           QPropertyAnimation,
-                          QAbstractAnimation)
+                          QAbstractAnimation, 
+                          pyqtProperty, 
+                          QObject, 
+                          QTextCodec, 
+                          QUrl)
 from PyQt5.QtWidgets import (QDesktopWidget,
                              QApplication,
                              QWidget,
@@ -73,6 +78,9 @@ from PyQt5.QtGui import (QFont,
                          QColor, 
                          QMovie, 
                          QPalette)
+from PyQt5.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
+from PyQt5.QtWebChannel import QWebChannel
+from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import (
@@ -89,13 +97,15 @@ import json
 from bids_validator import BIDSValidator
 import faulthandler
 import zipfile
+import requests
+from bs4 import BeautifulSoup
+import markdown
 
 # from config import config_dict, STDOUT_WRITE_STREAM_CONFIG, TQDM_WRITE_STREAM_CONFIG, STREAM_CONFIG_KEY_QUEUE, \
 #     STREAM_CONFIG_KEY_QT_QUEUE_RECEIVER
 # from my_logging import setup_logging
 
 # faulthandler.enable()
-
 
 
 # =============================================================================
@@ -187,6 +197,9 @@ class MainWindow(QMainWindow):
         # self.bids_menu.addAction(remove_password)
 
         self.PipelinesMenu = self.menu_bar.addMenu('&Pipelines')
+        add_pipelines_action = QAction('&Add New Pipelines', self)
+        add_pipelines_action.triggered.connect(self.add_new_pipelines)
+        self.PipelinesMenu.addAction(add_pipelines_action)
 
         for pipe in self.pipelines_name:
             new_action = QAction(f'&{pipe}', self)
@@ -557,17 +570,243 @@ class MainWindow(QMainWindow):
         self.updateDatasetDescription_win.show()
 
 
-    def add_new_bids_apps(self):
-        pass
-        # if hasattr(self, 'add_new_bids_apps_win'):
-        #     del self.add_new_bids_apps_win
-        # self.add_new_bids_apps_win = AddNewBidsApps(self)
-        # self.add_new_bids_apps_win.show()
+    def add_new_pipelines(self):
+        if hasattr(self, 'add_new_pipelines_win'):
+            del self.add_new_pipelines_win
+        self.add_new_pipelines_win = AddNewPipelinesWindow(self)
+        self.add_new_pipelines_win.show()
         
         
     def launch_bids_apps(self):
         pass
 
+
+
+# =============================================================================
+# Add New Pipelines
+# =============================================================================
+class AddNewPipelinesWindow(QMainWindow):
+    """
+    """
+    
+    def __init__(self, parent):
+        """
+        
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.setMinimumSize(QSize(700,700))
+
+        self.setWindowTitle("Add New Pipeline")
+        
+        self.parent = parent
+        
+        self.repos = self.get_github_repositories()
+        
+        # Create widgets for each repositories
+        repos_widget = []
+        for repo in self.repos:
+            repo_widget = GitHubRepositoryWidget(self, repo)
+            repos_widget.append(repo_widget)
+        
+        layout = QVBoxLayout()
+        for repo in repos_widget:
+            layout.addWidget(repo)
+            
+        vertical_spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
+        layout.addItem(vertical_spacer)
+        
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setAutoFillBackground(True)
+        scroll_area.setBackgroundRole(QPalette.Base)
+        
+        scroll_area.setLayout(layout)
+        
+        self.setCentralWidget(scroll_area)
+        
+    def get_github_repositories(self):
+        url = 'https://github.com/orgs/BMAT-Apps/repositories'
+        html = requests.get(url)
+        soup = BeautifulSoup(html.content, 'html5lib')
+        
+        # Find all repositories
+        repos = soup.find('div', {'class':'org-repos repo-list'})        
+        list_repos = [item for item in repos.findAll('div', {'class':'flex-auto', 'data-view-component':True})]
+        
+        repos_dic = []
+        for repo in list_repos:
+            rep = {}
+            rep['Name'] = repo.h3.a.text.strip()
+            rep['href'] = repo.h3.a['href']
+            rep['desc'] = repo.p.text.strip()
+            repos_dic.append(rep)
+            
+        return repos_dic
+            
+
+# =============================================================================
+# Github repository Widget
+# =============================================================================
+class GitHubRepositoryWidget(QWidget):
+    """
+    """
+    
+    def __init__(self, parent, repo):
+        """
+        
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        
+        self.repo = repo
+        
+        self.setMinimumWidth(650)
+        
+        self.repo_button = QPushButton(repo.get('Name'))
+        self.repo_button.setFont(QFont('Calibri', 20))
+        self.repo_button.clicked.connect(self.repo_widget)
+        
+        self.description = QLabel(repo.get('desc'))
+        self.description.setFont(QFont('Calibri', 13))
+        self.description.setWordWrap(True)
+        
+        hspacer = QSpacerItem(20, 40, QSizePolicy.Expanding, QSizePolicy.Minimum)  
+        
+        layout = QVBoxLayout()
+        lay = QHBoxLayout()
+        lay.addWidget(self.repo_button)
+        lay.addItem(hspacer)
+        layout.addLayout(lay)
+        layout.addWidget(self.description)
+        
+        self.setLayout(layout)
+        self.setAutoFillBackground(True)
+        self.setBackgroundRole(QPalette.Background)
+        
+    def repo_widget(self):
+        if hasattr(self, 'repo_widget_win'):
+            del self.repo_widget_win
+        self.repo_widget_win = RepositoryWidget(self.parent, self.repo)
+        self.repo_widget_win.show()
+        self.parent.hide()
+
+    
+    
+# =============================================================================
+# RepositoryWidget
+# =============================================================================
+class RepositoryWidget(QMainWindow):
+    """
+    """
+    
+    def __init__(self, parent, repo):
+        """
+        
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+        repo_ref : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.repo = repo
+        
+        self.window = QWidget(self)
+        
+        self.window.setMinimumSize(QSize(800, 700))
+        self.setWindowTitle(self.repo.get('Name'))
+        
+        self.back_button = QPushButton('Back')
+        self.back_button.clicked.connect(self.back)
+        
+        self.repo_name = QLabel(self.repo.get('Name'))
+        self.repo_name.setFont(QFont('Calibri', 30))
+        
+        self.description = QLabel(self.repo.get('desc'))
+        self.description.setFont(QFont('Calibri', 15))
+        self.description.setWordWrap(True)
+        
+        self.get_pipeline_button = QPushButton('Get Pipeline')
+        self.get_pipeline_button.clicked.connect(self.get_pipeline)
+        
+        hspacer1 = QSpacerItem(20, 40, QSizePolicy.Expanding, QSizePolicy.Minimum) 
+        hspacer2 = QSpacerItem(20, 40, QSizePolicy.Expanding, QSizePolicy.Minimum) 
+        
+        # readme_url = f'https://raw.githubusercontent.com/BIDS-Apps/{self.repo.get("Name")}/main/README.md'
+        
+        # readme = QTextEdit()
+        
+        # readme_raw = requests.get(readme_url)
+        
+        # readme_html = markdown.markdown(readme_raw.text)
+        
+        # readme.setHtml(readme_html)
+        
+        url = f'https://github.com/BMAT-Apps/{self.repo.get("Name")}'
+        # url = 'https://github.com/ColinVDB/BMAT'
+        
+        html = requests.get(url)
+        soup = BeautifulSoup(html.content, 'html5lib')
+        
+        # Find all repositories
+        readme_html = soup.find('article', {'class':'markdown-body entry-content container-lg', 'itemprop':'text'})
+        readme = QTextEdit()
+        readme.setHtml(str(readme_html))
+        
+        layout = QVBoxLayout()
+        lay1 = QHBoxLayout()
+        lay1.addWidget(self.back_button)
+        lay1.addItem(hspacer1)
+        lay = QHBoxLayout()
+        lay.addWidget(self.repo_name)
+        lay.addItem(hspacer2)
+        lay.addWidget(self.get_pipeline_button)
+        layout.addLayout(lay1)
+        layout.addLayout(lay)
+        layout.addWidget(self.description)
+        layout.addWidget(readme)
+        
+        self.window.setLayout(layout)
+        
+        self.setCentralWidget(self.window)
+        
+        
+    def get_pipeline(self):
+        pass
+    
+    
+    def back(self):
+        self.parent.show()
+        self.close()
+        self.deleteLater()
 
 
 # =============================================================================
@@ -1107,7 +1346,7 @@ class BidsDirView(QWidget):
                 self.itksnap = QFileDialog.getOpenFileName(self, "Select the path to itksnap")[0]
                 if self.itksnap != None and self.itksnap != '':
                     self.threads.append(QThread())
-                    self.operation = SubprocessWorker(f'{self.itksnap} -g {item_path}')
+                    self.operation = SubprocessWorker(f'"{self.itksnap}" -g {item_path}')
                     self.operation.moveToThread(self.threads[-1])
                     self.threads[-1].started.connect(self.operation.run)
                     self.operation.finished.connect(self.threads[-1].quit)
@@ -1119,7 +1358,7 @@ class BidsDirView(QWidget):
                     logging.info(f'No application selected open MRI \n \t Please select itksnap path')
             else:
                 self.threads.append(QThread())
-                self.operation = SubprocessWorker(f'{self.itksnap} -g {item_path}')
+                self.operation = SubprocessWorker(f'"{self.itksnap}" -g {item_path}')
                 self.operation.moveToThread(self.threads[-1])
                 self.threads[-1].started.connect(self.operation.run)
                 self.operation.finished.connect(self.threads[-1].quit)
@@ -1180,7 +1419,7 @@ class BidsDirView(QWidget):
             self.itksnap = QFileDialog.getOpenFileName(self, "Select the path to itksnap")[0]
             if self.itksnap != None and self.itksnap != '':
                 self.threads.append(QThread())
-                self.operation = SubprocessWorker(f'{self.itksnap} -g {item_path}')
+                self.operation = SubprocessWorker(f'"{self.itksnap}" -g {item_path}')
                 self.operation.moveToThread(self.threads[-1])
                 self.threads[-1].started.connect(self.operation.run)
                 self.operation.finished.connect(self.threads[-1].quit)
