@@ -740,7 +740,7 @@ class RepositoryWidget(QMainWindow):
         
         self.window = QWidget(self)
         
-        self.window.setMinimumSize(QSize(800, 700))
+        self.window.setMinimumSize(QSize(1200, 700))
         self.setWindowTitle(self.repo.get('Name'))
         
         self.back_button = QPushButton('Back')
@@ -772,13 +772,16 @@ class RepositoryWidget(QMainWindow):
         url = f'https://github.com/BMAT-Apps/{self.repo.get("Name")}'
         # url = 'https://github.com/ColinVDB/BMAT'
         
-        html = requests.get(url)
-        soup = BeautifulSoup(html.content, 'html5lib')
+        # html = requests.get(url)
+        # soup = BeautifulSoup(html.content, 'html5lib')
         
-        # Find all repositories
-        readme_html = soup.find('article', {'class':'markdown-body entry-content container-lg', 'itemprop':'text'})
-        readme = QTextEdit()
-        readme.setHtml(str(readme_html))
+        # # Find all repositories
+        # readme_html = soup.find('article', {'class':'markdown-body entry-content container-lg', 'itemprop':'text'})
+        # readme = QTextEdit()
+        # readme.setHtml(str(readme_html))
+        
+        web = QWebEngineView()
+        web.load(QUrl(url))
         
         layout = QVBoxLayout()
         lay1 = QHBoxLayout()
@@ -791,7 +794,7 @@ class RepositoryWidget(QMainWindow):
         layout.addLayout(lay1)
         layout.addLayout(lay)
         layout.addWidget(self.description)
-        layout.addWidget(readme)
+        layout.addWidget(web)
         
         self.window.setLayout(layout)
         
