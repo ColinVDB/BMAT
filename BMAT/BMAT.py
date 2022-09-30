@@ -139,32 +139,36 @@ class MainWindow(QMainWindow):
         self.pipelines = {}
         self.pipelines_name = []
 
-        for root, dirs, files in os.walk('Pipelines'):
-            for file in files:
-                if '.json' in file:
-                    f = open(pjoin(root,file))
-                    jsn = json.load(f)
-                    self.pipelines_name.append(jsn.get('name'))
-                    import_name = jsn.get('import_name')
-                    attr = jsn.get('attr')
-                    self.pipelines[jsn.get('name')] = jsn
-                    self.pipelines[jsn.get('name')]['import'] = __import__(f'Pipelines.{import_name}', globals(), locals(), [attr], 0)
-                    f.close()
+        for root, dirs, _ in os.walk('Pipelines'):
+            for d in dirs:
+                if d == 'src':
+                    for r, ds, files in os.walk(pjoin(root,d)):
+                        for file in files:
+                            if '.json' in file:
+                                import_r = r.replace('/','.')
+                                f = open(pjoin(r,file))
+                                jsn = json.load(f)
+                                self.pipelines_name.append(jsn.get('name'))
+                                import_name = jsn.get('import_name')
+                                attr = jsn.get('attr')
+                                self.pipelines[jsn.get('name')] = jsn
+                                self.pipelines[jsn.get('name')]['import'] = __import__(f'{import_r}.{import_name}', globals(), locals(), [attr], 0)
+                                f.close()
 
-        self.new_pipelines = {}
-        self.new_pipelines_name = []
+        self.local_pipelines = {}
+        self.local_pipelines_name = []
 
-        if os.path.isdir('NewPipelines'):
-            for root, dirs, files in os.walk('NewPipelines'):
+        if os.path.isdir('LocalPipelines'):
+            for root, dirs, files in os.walk('LocalPipelines'):
                 for file in files:
                     if '.json' in file:
                         f = open(pjoin(root,file))
                         jsn = json.load(f)
-                        self.new_pipelines_name.append(jsn.get('name'))
+                        self.local_pipelines_name.append(jsn.get('name'))
                         import_name = jsn.get('import_name')
                         attr = jsn.get('attr')
-                        self.new_pipelines[jsn.get('name')] = jsn
-                        self.new_pipelines[jsn.get('name')]['import'] = __import__(f'NewPipelines.{import_name}', globals(), locals(), [attr], 0)
+                        self.local_pipelines[jsn.get('name')] = jsn
+                        self.local_pipelines[jsn.get('name')]['import'] = __import__(f'LocalPipelines.{import_name}', globals(), locals(), [attr], 0)
                         f.close()
 
         # Create menu bar and add action
@@ -204,11 +208,12 @@ class MainWindow(QMainWindow):
             new_action = QAction(f'&{pipe}', self)
             new_action.triggered.connect(lambda checked, arg=pipe: self.launch_pipeline(arg))
             self.PipelinesMenu.addAction(new_action)
-        
-        for pipe in self.new_pipelines_name:
+            
+        self.local_pipelines_menu = self.menu_bar.addMenu('&Local Pipelines')        
+        for pipe in self.local_pipelines_name:
             new_action = QAction(f'&{pipe}', self)
-            new_action.triggered.connect(lambda checked, arg=pipe: self.launch_pipeline(arg))
-            self.PipelinesMenu.addAction(new_action)
+            new_action.triggered.connect(lambda checked, arg=pipe: self.launch_local_pipeline(arg))
+            self.local_pipelines_menu.addAction(new_action)
 
         # self.threads_pool = QThreadPool.globalInstance()
         
@@ -435,11 +440,11 @@ class MainWindow(QMainWindow):
         self.window.setLayout(self.layout)
         self.window.setLayout(self.layout)
 
-
+    
 
     def launch_pipeline(self, pipe):
         """
-        Used to launch a pipeline
+        Used to launch a local pipeline
 
         Parameters
         ----------
@@ -452,11 +457,59 @@ class MainWindow(QMainWindow):
 
         """
         if self.pipelines.get(pipe) != None:
-            self.pipelines[pipe]['import'].launch(self, add_info=self.pipelines[pipe]['add_info'])
+            self.pipelines[pipe]['import'].launch(self, add_info=self.local_pipelines[pipe]['add_info'])
             return
+        
+    
+    def update_pipelines(self):
+        self.pipelines = {}
+        self.pipelines_name = []
 
-        if self.new_pipelines.get(pipe) != None:
-            self.new_pipelines[pipe]['import'].launch(self, add_info=self.new_pipelines[pipe]['add_info'])
+        for root, dirs, _ in os.walk('Pipelines'):
+            for d in dirs:
+                if d == 'src':
+                    for r, ds, files in os.walk(pjoin(root,d)):
+                        for file in files:
+                            if '.json' in file:
+                                import_r = r.replace('/','.')
+                                f = open(pjoin(r,file))
+                                jsn = json.load(f)
+                                self.pipelines_name.append(jsn.get('name'))
+                                import_name = jsn.get('import_name')
+                                attr = jsn.get('attr')
+                                self.pipelines[jsn.get('name')] = jsn
+                                self.pipelines[jsn.get('name')]['import'] = __import__(f'{import_r}.{import_name}', globals(), locals(), [attr], 0)
+                                f.close()
+        
+        # self.PipelinesMenu.deleteLater()
+                                
+        self.PipelinesMenu.clear()
+        add_pipelines_action = QAction('&Add New Pipelines', self)
+        add_pipelines_action.triggered.connect(self.add_new_pipelines)
+        self.PipelinesMenu.addAction(add_pipelines_action)
+
+        for pipe in self.pipelines_name:
+            new_action = QAction(f'&{pipe}', self)
+            new_action.triggered.connect(lambda checked, arg=pipe: self.launch_pipeline(arg))
+            self.PipelinesMenu.addAction(new_action)
+
+
+    def launch_local_pipeline(self, pipe):
+        """
+        Used to launch a local pipeline
+
+        Parameters
+        ----------
+        pipe : a pipeline
+            GUI to allow the user to run a pipeline on the database
+
+        Returns
+        -------
+        None.
+
+        """
+        if self.local_pipelines.get(pipe) != None:
+            self.local_pipelines[pipe]['import'].launch(self, add_info=self.local_pipelines[pipe]['add_info'])
             return
 
 
@@ -753,8 +806,12 @@ class RepositoryWidget(QMainWindow):
         self.description.setFont(QFont('Calibri', 15))
         self.description.setWordWrap(True)
         
-        self.get_pipeline_button = QPushButton('Get Pipeline')
-        self.get_pipeline_button.clicked.connect(self.get_pipeline)
+        if self.repo.get('Name') not in self.parent.parent.pipelines_name:
+            self.pipeline_button = QPushButton('Get Pipeline')
+            self.pipeline_button.clicked.connect(self.get_pipeline)
+        else:
+            self.pipeline_button = QPushButton('Update Pipeline')
+            self.pipeline_button.clicked.connect(self.update_pipeline)
         
         hspacer1 = QSpacerItem(20, 40, QSizePolicy.Expanding, QSizePolicy.Minimum) 
         hspacer2 = QSpacerItem(20, 40, QSizePolicy.Expanding, QSizePolicy.Minimum) 
@@ -790,7 +847,7 @@ class RepositoryWidget(QMainWindow):
         lay = QHBoxLayout()
         lay.addWidget(self.repo_name)
         lay.addItem(hspacer2)
-        lay.addWidget(self.get_pipeline_button)
+        lay.addWidget(self.pipeline_button)
         layout.addLayout(lay1)
         layout.addLayout(lay)
         layout.addWidget(self.description)
@@ -802,13 +859,205 @@ class RepositoryWidget(QMainWindow):
         
         
     def get_pipeline(self):
-        pass
+        self.thread = QThread()
+        self.worker = AddPipelineWorker(self.repo)
+        self.worker.moveToThread(self.thread)
+        self.thread.started.connect(self.worker.run)
+        self.worker.in_progress.connect(self.add_update_in_progress)
+        self.worker.finished.connect(self.update_pipelines)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.start()
+    
+    
+    def update_pipeline(self):
+        self.thread = QThread()
+        self.worker = UpdatePipelineWorker(self.repo)
+        self.worker.moveToThread(self.thread)
+        self.thread.started.connect(self.worker.run)
+        self.worker.in_progress.connect(self.add_update_in_progress)
+        self.worker.finished.connect(self.update_pipelines)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.start()
+        
+    def update_pipelines(self):
+        self.parent.parent.update_pipelines()
     
     
     def back(self):
         self.parent.show()
         self.close()
         self.deleteLater()
+        
+        
+    def add_update_in_progress(self, in_progress):
+        if 'Add' in in_progress[0]:
+            if in_progress[1]:
+                if hasattr(self, 'add_win'):
+                    self.add_win.deleteLater()
+                    del self.add_win
+                self.add_win = AddUpdatePipelineWindow(self, self.repo.get('Name'), 'Add')
+                self.add_win.show()
+            else:
+                if not hasattr(self, 'add_win'):
+                    pass
+                else:
+                    self.add_win.update(in_progress)
+            
+        elif 'Update' in in_progress[0]:
+            if in_progress[1]:
+                if hasattr(self, 'add_win'):
+                    self.add_win.deleteLater()
+                    del self.add_win
+                self.add_win = AddUpdatePipelineWindow(self, self.repo.get('Name'), 'Update')
+                self.add_win.show()
+            else:
+                if not hasattr(self, 'add_win'):
+                    pass
+                else:
+                    self.add_win.update(in_progress)
+            
+        else:
+            if not hasattr(self, 'add_win'):
+                pass
+            else:
+                self.add_win.update(in_progress)
+                
+                
+                
+# =============================================================================
+# AddUpdatePipelineWindow
+# =============================================================================
+class AddUpdatePipelineWindow(QMainWindow):
+    """
+    """
+    
+    def __init__(self, parent, name, check):
+        """
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+        name : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        
+        if check == 'Add':
+            self.setWindowTitle(f"Add {name}")
+        elif check == 'Update':
+            self.setWindowTitle(f'Update {name}')
+        else:
+            self.setWindowTitle('{name} ?')
+            
+        self.window = QWidget()
+        
+        self.git_working_gif = QMovie('Pictures/roll_load.gif')
+        self.git_working_gif.setScaledSize(QSize(25,25))
+        
+        self.python_working_gif = QMovie('Pictures/roll_load.gif')
+        self.python_working_gif.setScaledSize(QSize(25,25))
+        
+        self.docker_working_gif = QMovie('Pictures/roll_load.gif')
+        self.docker_working_gif.setScaledSize(QSize(25,25))
+        
+        self.working_gif = QMovie('Pictures/roll_load.gif')
+        self.working_gif.setScaledSize(QSize(25,25))
+        
+        self.check_icon = QPixmap('Pictures/check.png')
+        self.check_icon = self.check_icon.scaled(QSize(20,20))
+        
+        git_lab = QLabel('Git')
+        self.git_check = QLabel()
+        self.git_check.setMovie(self.git_working_gif)
+        
+        python_lab = QLabel('Python requirements')
+        self.python_check = QLabel()
+        self.python_check.setMovie(self.python_working_gif)
+        
+        docker_lab = QLabel('docker')
+        self.docker_check = QLabel()
+        self.docker_check.setMovie(self.docker_working_gif)
+        
+        self.general_check = QLabel()
+        self.general_check.setMovie(self.working_gif)
+        
+        self.working_gif.start()
+        
+        layout = QGridLayout()
+        layout.addWidget(git_lab,0,0,1,1)
+        layout.addWidget(self.git_check,0,1,1,1)
+        layout.addWidget(python_lab,1,0,1,1)
+        layout.addWidget(self.python_check,1,1,1,1)
+        layout.addWidget(docker_lab,2,0,1,1)
+        layout.addWidget(self.docker_check,2,1,1,1)
+        layout.addWidget(self.general_check,3,0,1,2)
+        
+        self.window.setLayout(layout)
+        
+        self.setCentralWidget(self.window)
+        
+        self.center()
+        
+        
+    def update(self, in_progress):
+        if 'repo' in in_progress[0]:
+            if in_progress[1]:
+                self.git_working_gif.start()
+            else:
+                self.git_working_gif.stop()
+                self.git_check.clear()
+                self.git_check.setPixmap(self.check_icon)
+        elif 'python' in in_progress[0]:
+            if in_progress[1]:
+                self.python_working_gif.start()
+            else:
+                self.python_working_gif.stop()
+                self.python_check.clear()
+                self.python_check.setPixmap(self.check_icon)
+        elif 'docker' in in_progress[0]:
+            if in_progress[1]:
+                self.docker_working_gif.start()
+            else:
+                self.docker_working_gif.stop()
+                self.docker_check.clear()
+                self.docker_check.setPixmap(self.check_icon)
+        elif 'Add' in in_progress[0] or 'Update' in in_progress[0]:
+            if in_progress[1]:
+                pass
+            else:
+                self.working_gif.stop()
+                self.general_check.clear()
+                self.general_check.setPixmap(self.check_icon)
+        else:
+            pass
+    
+    
+    def center(self):
+        """
+
+
+        Returns
+        -------
+        None.
+
+        """
+        qr = self.frameGeometry()
+        cp = QDesktopWidget().availableGeometry().center()
+        qr.moveCenter(cp)
+        self.move(qr.topLeft())
+    
+    
 
 
 # =============================================================================
@@ -4141,7 +4390,7 @@ class SubprocessWorker(QObject):
     """
     """
     finished = pyqtSignal()
-    progress = pyqtSignal(int)
+    in_progress = pyqtSignal(tuple)
 
 
     def __init__(self, operation):
@@ -4170,7 +4419,171 @@ class SubprocessWorker(QObject):
         None.
 
         """
+        operation = self.operation.split(' ')[0]
+        self.in_progress.emit((operation, True))
         subprocess.Popen(self.operation, shell=True).wait()
+        self.in_progress.emit((operation, False))
+        self.finished.emit()
+        
+        
+        
+# =============================================================================
+# AddPipelineWorker
+# =============================================================================
+class AddPipelineWorker(QObject):
+    """
+    """
+    finished = pyqtSignal()
+    in_progress = pyqtSignal(tuple)
+
+
+    def __init__(self, repo):
+        """
+
+
+        Parameters
+        ----------
+        operation : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.repo = repo
+
+    def run(self):
+        """
+
+
+        Returns
+        -------
+        None.
+
+        """
+        print('Add Pipeline Worker: Run')
+        self.in_progress.emit((f'Add {self.repo.get("Name")}', True))
+        
+        git_url = f'https://github.com/BMAT-Apps/{self.repo.get("Name")}.git'
+        
+        pipeline_path = f'Pipelines/{self.repo.get("Name")}'
+        
+        self.in_progress.emit(('Clone repo', True))
+        
+        subprocess.Popen(f'git clone {git_url} {pipeline_path}', shell=True).wait()
+        
+        self.in_progress.emit(('Clone repo', False))
+        
+        self.in_progress.emit(('python requirements', True))
+        
+        with open(f'{pipeline_path}/setup.json') as json_file:
+            setup = json.load(json_file)
+        
+        if setup.get('python_requirements') != None and setup.get('python_requirements') != "":
+            requirements_path = f'{pipeline_path}/{setup.get("python_requirements")}'
+            subprocess.Popen(f'pip install -r {requirements_path}', shell=True).wait()
+        
+        self.in_progress.emit(('python requirements', False))
+        
+        self.in_progress.emit(('docker', True))
+        
+        if setup.get('docker') != None and setup.get('docker') != "":
+            docker = setup.get('docker')
+            if docker.get('docker') != None and setup.get('docker') != "":
+                docker_name = docker.get('docker')
+                if docker_name == 'DockerFile':
+                    dockerfile_path = f'{pipeline_path}/Dockerfile'
+                    subprocess.Popen(f'docker build -t {docker.get("tag")} -f {dockerfile_path} .', shell=True).wait()
+                else:
+                    subprocess.Popen(f'docker pull {docker_name}', shell=True).wait()
+                    if docker.get('tag') != None and docker.get('tag') != "":
+                        subprocess.Popen(f'docker tag {docker_name} {docker.get("tag")}', shell=True).wait()
+        
+        self.in_progress.emit(('docker', False))
+        
+        self.in_progress.emit((f'Add {self.repo.get("Name")}', False))
+        self.finished.emit()
+        
+        
+        
+# =============================================================================
+# UpdatePipelineWorker
+# =============================================================================
+class UpdatePipelineWorker(QObject):
+    """
+    """
+    finished = pyqtSignal()
+    in_progress = pyqtSignal(tuple)
+
+
+    def __init__(self, repo):
+        """
+
+
+        Parameters
+        ----------
+        operation : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.repo = repo
+
+    def run(self):
+        """
+
+
+        Returns
+        -------
+        None.
+
+        """
+        self.in_progress.emit((f'Update {self.repo.get("Name")}', True))
+        
+        # git_url = f'https://github.com/BMAT-Apps/{self.repo.get("Name")}.git'
+        
+        self.in_progress.emit(('Pull repo', True))
+        
+        pipeline_path = f'Piepelines/{self.repo.get("Name")}'
+        
+        subprocess.Popen(f'git -C {pipeline_path} pull', shell=True).wait()
+        
+        self.in_progress.emit(('Pull repo', False))
+        
+        self.in_progress.emit(('update python requirements', True))
+        
+        with open(f'Pipelines/{self.repo.get("Name")}/setup.json') as json_file:
+            setup = json.load(json_file)
+        
+        if setup.get('python_requirements') != None and setup.get('python_requirements') != "":
+            requirements_path = f'Pipelines/{self.repo.get("Name")}/{setup.get("python_requirements")}'
+            subprocess.Popen(f'pip install -r {requirements_path}', shell=True).wait()
+        
+        self.in_progress.emit(('update python requirements', False))
+        
+        self.in_progress.emit(('update docker', True))
+        
+        if setup.get('docker') != None and setup.get('docker') != "":
+            docker = setup.get('docker')
+            if docker.get('docker') != None and setup.get('docker') != "":
+                docker_name = docker.get('docker')
+                if docker_name == 'DockerFile':
+                    dockerfile_path = f'Pipelines/{self.repi.get("Name")}Dockerfile'
+                    subprocess.Popen(f'docker build -t {docker.get("tag")} -f {dockerfile_path} .', shell=True).wait()
+                else:
+                    subprocess.Popen(f'docker pull {docker_name}', shell=True).wait()
+                    if docker.get('tag') != None and docker.get('tag') != "":
+                        subprocess.Popen(f'docker tag {docker_name} {docker.get("tag")}', shell=True).wait()
+        
+        self.in_progress.emit(('update docker', False))
+        
+        self.in_progress.emit((f'Update {self.repo.get("Name")}', False))
         self.finished.emit()
 
 
