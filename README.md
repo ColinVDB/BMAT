@@ -108,6 +108,8 @@ Docker is a set of platform as a service (PaaS) products that use OS-level virtu
 
 [Docker installation tutorial](https://docs.docker.com/get-docker/)
 
+Docker installation process can be tedious on certain OS, especially on Windows and MacOSX
+
 #### ITK-snap
 
 ITK-SNAP is an easy-to-use 3D viewer for medical images (DICOM, NIfTI, etc.) and provide a great framework to perform segmentation of structure. BMAT uses this software to obverse the medical images. 
@@ -147,30 +149,15 @@ pip install -r requirements.txt
 
 #### Install docker required images
 
-The last part of the installation is to pull the different docker images used by the software. For that make sure that the docker daemon socket is active. On Windows and Mac, you will need to run Docker Desktop in the background for it to be active. To pull a docker image, open a terminal and type 'docker pull *name of the image to download*. There is 4 images that needs to be pulled:
+The last part of the installation is to pull the different docker images used by the software. For that make sure that the docker daemon socket is active. On Windows and Mac, you will need to run Docker Desktop in the background for it to be active. To pull a docker image, open a terminal and type 'docker pull *name of the image to download*. There is 2 images that needs to be pulled:
 
-1. colinvdb/bmat-ext:0.0.1: this image is an docker extension of BMAT and contains all necessary programs that the software required to work properly like:
-    1. dcm2niix: for the conversion from DICOM to NIfTI
-    2. ANTs Registration: for the registration pipeline 
-    3. Freesurfer: For the automatic segmentation pipeline 
+1. colinvdb/bmat-dcm2niix: this image is an docker extension of BMAT and contains [dcm2niix](https://github.com/rordenlab/dcm2niix), a program used to convert DICOM files to NIfTI, that the software required to work properly like:
 ```
-docker pull colinvdb/bmat-ext:0.0.1
+docker pull colinvdb/bmat-dcm2niix
 ```
-2. bids/validator: this image is used to verify the BIDS validity of the datasets
+2. bids/validator: this image is used to verify the BIDS validity of the datasets ([bids/validator](https://hub.docker.com/r/bids/validator))
 ```
 docker pull bids/validator
-```
-3. blakedewey/phase_unwrap: this image is used to unwrap phase images and is used in th Phase unwrapping pipeline
-```
-docker pull blakedewey/phase_unwrap
-```
-4. blakedewey/flairstar: this image is used to compute a FLAIR* image based on a FLAIR and a Magnitude T2* image. 
-```
-docker pull blakedewey/flairstar:deprecated
-```
-For this image you will need to change locally the tag of this image by typing:
-```
-docker tag blakedewey/flairstar:deprecated blakedewey/flairstar:latest
 ```
 
 **The installation of BMAT is now complete and the software is now ready to be launched**
@@ -180,7 +167,7 @@ The next section will show how to use this software
 ## Utilization
 
 This section aims to explain how to use BMAT. 
-You can find a little tutorial video [here](https://youtu.be/vsiRZ4xLT-o).
+You can find a little tutorial video [here]().
 
 ### Open/Create new BIDS
 
@@ -196,7 +183,8 @@ Here is a picture of the main window of BMAT. It is composed of these different 
 * Dataset Actions (top right): buttons to perform Actions on the dataset
 * Quick Viewer (bottom right): Quick viewer to observe the file in the dataset in a safe manner
 * BIDS menu (top left): contains other other actions to manage the dataset
-* Pipelines menu (top left): contains analysis pipelines to process the dataset
+* Pipelines menu (top left): add and run analysis pipelines shared by the BMAT-community
+* Local Pipelines menu (top left): run local analysis pipelines implemented by the user
 
 ![Main Window](/Readme_Pictures/Main_Window.png)
 
@@ -247,11 +235,21 @@ This menu contains some more features to manage the BIDS dataset. Here is a desc
 
 ### Pipelines Menu
 
-This menu contains the different analysis pipelines that are integrated into BMAT to process the images inside the dataset. All these pipelines work with docker. 
+This menu allows the user to add and run pipelines to the software to automatically run analysis on the database. Pipelines that can be added have been implemented and shared by the BMAT-community through the [BMAT-Apps](https://github.com/orgs/BMAT-Apps) GitHub organization. The feature is describe in detail below:
+
+#### Add new Pipelines
+
+By clicking on the *Add New Pipeline* item from the *Pipelines* drop-down menu, this will open a window that show all the different pipelines that can be found in the [BMAT-Apps](https://github.com/orgs/BMAT-Apps) GitHub organization (shown in Figure below).
+
+![Add New Pipeline Window](/Readme_pictures/AddNewPipeline.png)
+
+The user can then click on any pipeline to open another specific window that shows the documentation of the pipeline, as can be found on GitHub (cf. Figure below). The user has the possibility to download the pipeline by clicking on the *Get Pipeline* button. 
+
+![Pipeline Window](/Readme_pictures/phase_unwrap.png)
 
 #### Available pipelines
 
-Here is a description of the available pipelines. 
+All the available pipelines can be found in the [BMAT-Apps](https://github.com/orgs/BMAT-Apps) GitHub organization. Here is a description of the available pipelines. 
 
 ##### Registration pipeline
 
@@ -289,7 +287,11 @@ This pipeline is based on [FreeSurfer](https://surfer.nmr.mgh.harvard.edu/) and 
 
 Finally, this operation can be scripted for several subjects of the database using the *Select subjects* and *Select sessions* input lines. For both, the user can enter the ID of the subjects and sessions that he wants to process, seperated by a comma (e.g. 001,002,010,023). He can also uses "-" keyword to specify to the software that he wants to process subject from ID0 to ID1 (e.g. 001-005 will processed subjects 001,002,003,004 and 005). Finally, by using the "all" keyword, the software will processed all the subjects inside the database. **However, be mindful that the processing pipelines tend to take a significant amount of time**. 
 
-#### Adding pipelines
+### Local Pipelines
+
+This feature allows the user to add and run its local implemented pipelines on the database. To add a new local pipeline, the user must have knowledge in python and PyQt5. the process is explained below.
+
+#### Adding Local pipelines
 
 BMAT allows the user to add his own pipelines to the software to run specific in-house developed pipelines. To add a new Pipeline to the software, the user must add its source code in python containing a dedicated graphical interface using PyQt5 and the computation code, as well as an associated JSON file containing metainformation about the pipeline, in the *NewPipelines* folder of the source code of the software. The JSON file must be written in a dictionary-like structure, as described in Figure 6 and contain the following pieces of information: 
 

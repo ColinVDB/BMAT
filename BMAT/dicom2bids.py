@@ -291,7 +291,7 @@ class BIDSHandler:
                 # subprocess.Popen(f'docker run --rm -v "{path}":/media -v "{directory}":/mnt xnat/dcm2niix dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /mnt /media', shell=True).wait()
                 # self.client.containers.run('xnat/dcm2niix', auto_remove=True, volumes={f'{path}':{'bind':'/media', 'mode':'ro'}, f'{directory}':{'bind':'/mnt', 'mode':'rw'}}, command=['dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /mnt /media'])
                 # subprocess.Popen(f'dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o {directory} {path}', shell=True).wait()
-                subprocess.Popen(f'docker run --rm --privileged -v "{directory}":/home -v "{path}":/media colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /home /media"', shell=True).wait()
+                subprocess.Popen(f'docker run --rm --privileged -v "{directory}":/home -v "{path}":/media colinvdb/bmat-dcm2niix dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /home /media', shell=True).wait()
                 
         for _,_,files in os.walk(directory):
             for file in files:

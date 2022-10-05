@@ -1,1 +1,0 @@
-BIDS Neuroimaging Analysis Tool
