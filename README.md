@@ -241,11 +241,11 @@ This menu allows the user to add and run pipelines to the software to automatica
 
 By clicking on the *Add New Pipeline* item from the *Pipelines* drop-down menu, this will open a window that show all the different pipelines that can be found in the [BMAT-Apps](https://github.com/orgs/BMAT-Apps) GitHub organization (shown in Figure below).
 
-![Add New Pipeline Window](/Readme_pictures/AddNewPipeline.png)
+![Add New Pipeline Window](/Readme_Pictures/AddNewPipeline.png)
 
 The user can then click on any pipeline to open another specific window that shows the documentation of the pipeline, as can be found on GitHub (cf. Figure below). The user has the possibility to download the pipeline by clicking on the *Get Pipeline* button. 
 
-![Pipeline Window](/Readme_pictures/phase_unwrap.png)
+![Pipeline Window](/Readme_Pictures/phase_unwrap.png)
 
 #### Available pipelines
 
@@ -255,7 +255,7 @@ All the available pipelines can be found in the [BMAT-Apps](https://github.com/o
 
 This pipeline allows the user to register a certain image into the space of another image. For that BMAT uses *antsRegistrationSynQuick* from *ANTs* registration tool ([ANTs registration](http://stnava.github.io/ANTs/). This allows to quickly perform a rigid registration from one image to another. This registration will computer the registered image and the transformation matrix that have been used. This transformation matrix can also be used to register another images from the initial space to the reference space. 
 
-![Registration Piepeline](/Readme_Pictures/registrations.png)
+![Registration Pipeline](/Readme_Pictures/registrations.png)
 
 Finally, this operation can be scripted for several subjects of the database using the *Select subjects* and *Select sessions* input lines. For both, the user can enter the ID of the subjects and sessions that he wants to process, seperated by a comma (e.g. 001,002,010,023). He can also uses "-" keyword to specify to the software that he wants to process subject from ID0 to ID1 (e.g. 001-005 will processed subjects 001,002,003,004 and 005). Finally, by using the "all" keyword, the software will processed all the subjects inside the database. **However, be mindful that the processing pipelines tend to take a significant amount of time**. 
 
