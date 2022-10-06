@@ -146,6 +146,7 @@ class MainWindow(QMainWindow):
                         for file in files:
                             if '.json' in file:
                                 import_r = r.replace('/','.')
+                                import_r = r.replace('\\','.')
                                 f = open(pjoin(r,file))
                                 jsn = json.load(f)
                                 self.pipelines_name.append(jsn.get('name'))
