@@ -20,7 +20,6 @@ from pydicom import dcmread
 import logging
 import sys
 # from nipype.interfaces.dcm2nii import Dcm2niix
-import docker
 
 from tqdm.auto import tqdm
 # from my_logging import setup_logging
@@ -66,7 +65,6 @@ class BIDSHandler:
         # self.dcm2niix_converter.inputs.out_filename = "\"%d_%p_%t_%s\""
         # self.dcm2niix_converter.inputs.compress = 'y'
         # self.dicom2niix_path = 'dcm2niix'
-        self.client = docker.from_env()
 
         all_directories = [x for x in next(os.walk(root_dir))[1]]
         all_subj_dir = []
