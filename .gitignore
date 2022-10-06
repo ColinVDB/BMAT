@@ -5,3 +5,4 @@ BMAT/license.txt
 BMAT/bids_validator.json
 BMAT/sequences.csv
 BMAT/LocalPipelines/**
+!*/.gitkeep
