@@ -108,7 +108,7 @@ Docker is a set of platform as a service (PaaS) products that use OS-level virtu
 
 [Docker installation tutorial](https://docs.docker.com/get-docker/)
 
-Docker installation process can be tedious on certain OS, especially on Windows and MacOSX
+Docker installation process can be tedious on certain OS, especially on Windows and MacOSX. For Windows, you might have to change the backend to wsl2 ([instruction](https://learn.microsoft.com/en-us/windows/wsl/install-manual#step-4---download-the-linux-kernel-update-package)).
 
 #### ITK-snap
 
