@@ -7,3 +7,4 @@ BMAT/sequences.csv
 BMAT/LocalPipelines/**
 !BMAT/Pipelines/.gitkeep
 !BMAT/LocalPipelines/.gitkeep
+*.lta

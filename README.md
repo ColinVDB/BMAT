@@ -8,6 +8,8 @@ The BMAT software is a complete and easy-to-use local open-source neuroimaging a
 
 This section aims at explaining how to download and install BMAT. This software uses a lot of dependencies that needs to be installed which makes the installation process a bit long and tedious. 
 
+⚠️ **The installation of BMAT on MacOSx with an M1 chip may cause some issues** ⚠️
+
 ### Dependencies
 
 Firstly, this section presents the different dependencies that needs to be installed for this software to work properly. 
@@ -108,7 +110,13 @@ Docker is a set of platform as a service (PaaS) products that use OS-level virtu
 
 [Docker installation tutorial](https://docs.docker.com/get-docker/)
 
-Docker installation process can be tedious on certain OS, especially on Windows and MacOSX. For Windows, you might have to change the backend to wsl2 ([instruction](https://learn.microsoft.com/en-us/windows/wsl/install-manual#step-4---download-the-linux-kernel-update-package)).
+Docker installation process can be tedious on certain OS, especially on Windows and MacOSX. For Windows, you might have to change the backend of your OS to wsl2 ([instruction](https://learn.microsoft.com/en-us/windows/wsl/install-manual#step-4---download-the-linux-kernel-update-package)).
+
+#### Git 
+
+Git is free and open source software for distributed version control: tracking changes in any set of files, usually used for coordinating work among programmers collaboratively developing source code during software development. 
+
+[Git](https://git-scm.com/downloads)
 
 #### ITK-snap
 
@@ -147,6 +155,10 @@ Then install the required packages using this command:
 pip install -r requirements.txt
 ```
 
+⚠️ **Mac with an M1 chip** ⚠️
+
+There is an issue for Mac with M1 chip for the installation of the PyQt5 python package. Normally, by seting up and using a Rosetta Terminal, this should correct this issue. Here is a link to set up a Rosetta Terminal: [Set up a Rosetta](https://www.courier.com/blog/tips-and-tricks-to-setup-your-apple-m1-for-development/)
+
 #### Install docker required images
 
 The last part of the installation is to pull the different docker images used by the software. For that make sure that the docker daemon socket is active. On Windows and Mac, you will need to run Docker Desktop in the background for it to be active. To pull a docker image, open a terminal and type 'docker pull *name of the image to download*. There is 2 images that needs to be pulled:
@@ -167,7 +179,7 @@ The next section will show how to use this software
 ## Utilization
 
 This section aims to explain how to use BMAT. 
-You can find a little tutorial video [here]().
+A test DICOM MRI session of a healthy subject is available for download with this link [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7213153.svg)](https://doi.org/10.5281/zenodo.7213153)
 
 ### Open/Create new BIDS
 
