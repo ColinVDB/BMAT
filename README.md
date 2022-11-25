@@ -316,6 +316,6 @@ BMAT allows the user to add his own pipelines to the software to run specific in
 The implementation of the computation part of the pipeline can use docker container or can be implemented locally, allowing adaptability of the software to a wide range of Neuroimaging applications.
 
 # How To Cite: 
-
+1. Vanden Bulcke, C. et al. BMAT: An open-source BIDS managing and analysis tool. NeuroImage: Clinical 36, 103252 (2022).
 
 DOI: https://doi.org/10.1016/j.nicl.2022.103252
