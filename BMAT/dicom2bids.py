@@ -922,8 +922,8 @@ class BIDSHandler:
             raise FileExistsError(msg)
     
         if not pexists(pjoin(bids_dir, f'sub-{subject}')):
-            logging.error(f"Subject {old_id} is not in the database.")
-            raise FileNotFoundError(f"Subject {old_id} is not in the database.")
+            logging.error(f"Subject {old_ses} is not in the database.")
+            raise FileNotFoundError(f"Subject {old_ses} is not in the database.")
             
         if not pexists(pjoin(bids_dir, f'sub-{subject}', f'ses-{old_ses}')):
             logging.error(f"Session {old_ses} for Subject {subject} is not in the database.")
@@ -1215,7 +1215,7 @@ class BIDSHandler:
         # print(subjects_and_sessions)
         for sub, sess in subjects_and_sessions:
             for ses in sess:
-                # print(sub, ses)
+                print(sub, ses)
                 self.anonymisation(sub, ses)
                     
         
