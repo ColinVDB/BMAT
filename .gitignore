@@ -1,6 +1,10 @@
 BMAT/__pycache__/
-BMAT/Pipelines/__pycache__/
+BMAT/Pipelines/**
 BMAT/memory.xz
 BMAT/license.txt
 BMAT/bids_validator.json
-BMAT/NewPipelines/
+BMAT/sequences.csv
+BMAT/LocalPipelines/**
+!BMAT/Pipelines/.gitkeep
+!BMAT/LocalPipelines/.gitkeep
+*.lta

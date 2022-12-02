@@ -29,7 +29,14 @@ from PyQt5.QtCore import (QSize,
                           QProcess,
                           QAbstractTableModel,
                           pyqtProperty,
-                          QVariant)
+                          QVariant,
+                          QParallelAnimationGroup,
+                          QPropertyAnimation,
+                          QAbstractAnimation, 
+                          pyqtProperty, 
+                          QObject, 
+                          QTextCodec, 
+                          QUrl)
 from PyQt5.QtWidgets import (QDesktopWidget,
                              QApplication,
                              QWidget,
@@ -54,12 +61,25 @@ from PyQt5.QtWidgets import (QDesktopWidget,
                              QAction,
                              QTableView,
                              QAbstractScrollArea,
-                             QTabWidget)
+                             QTabWidget, 
+                             QInputDialog,
+                             QComboBox,
+                             QToolButton,
+                             QScrollArea,
+                             QSizePolicy,
+                             QFrame, 
+                             QGroupBox, 
+                             QSpacerItem)
 from PyQt5.QtGui import (QFont,
                          QIcon,
                          QTextCursor,
                          QPixmap,
-                         QColor)
+                         QColor, 
+                         QMovie, 
+                         QPalette)
+from PyQt5.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
+from PyQt5.QtWebChannel import QWebChannel
+from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import (
@@ -76,13 +96,15 @@ import json
 from bids_validator import BIDSValidator
 import faulthandler
 import zipfile
+import requests
+from bs4 import BeautifulSoup
+import markdown
 
 # from config import config_dict, STDOUT_WRITE_STREAM_CONFIG, TQDM_WRITE_STREAM_CONFIG, STREAM_CONFIG_KEY_QUEUE, \
 #     STREAM_CONFIG_KEY_QT_QUEUE_RECEIVER
 # from my_logging import setup_logging
 
 # faulthandler.enable()
-
 
 
 # =============================================================================
@@ -117,32 +139,36 @@ class MainWindow(QMainWindow):
         self.pipelines = {}
         self.pipelines_name = []
 
-        for root, dirs, files in os.walk('Pipelines'):
-            for file in files:
-                if '.json' in file:
-                    f = open(pjoin(root,file))
-                    jsn = json.load(f)
-                    self.pipelines_name.append(jsn.get('name'))
-                    import_name = jsn.get('import_name')
-                    attr = jsn.get('attr')
-                    self.pipelines[jsn.get('name')] = jsn
-                    self.pipelines[jsn.get('name')]['import'] = __import__(f'Pipelines.{import_name}', globals(), locals(), [attr], 0)
-                    f.close()
+        for root, dirs, _ in os.walk('Pipelines'):
+            for d in dirs:
+                if d == 'src':
+                    for r, ds, files in os.walk(pjoin(root,d)):
+                        for file in files:
+                            if '.json' in file:
+                                import_r = r.replace(os.sep,'.')
+                                f = open(pjoin(r,file))
+                                jsn = json.load(f)
+                                self.pipelines_name.append(jsn.get('name'))
+                                import_name = jsn.get('import_name')
+                                attr = jsn.get('attr')
+                                self.pipelines[jsn.get('name')] = jsn
+                                self.pipelines[jsn.get('name')]['import'] = __import__(f'{import_r}.{import_name}', globals(), locals(), [attr], 0)
+                                f.close()
 
-        self.new_pipelines = {}
-        self.new_pipelines_name = []
+        self.local_pipelines = {}
+        self.local_pipelines_name = []
 
-        if os.path.isdir('NewPipelines'):
-            for root, dirs, files in os.walk('NewPipelines'):
+        if os.path.isdir('LocalPipelines'):
+            for root, dirs, files in os.walk('LocalPipelines'):
                 for file in files:
                     if '.json' in file:
                         f = open(pjoin(root,file))
                         jsn = json.load(f)
-                        self.new_pipelines_name.append(jsn.get('name'))
+                        self.local_pipelines_name.append(jsn.get('name'))
                         import_name = jsn.get('import_name')
                         attr = jsn.get('attr')
-                        self.new_pipelines[jsn.get('name')] = jsn
-                        self.new_pipelines[jsn.get('name')]['import'] = __import__(f'NewPipelines.{import_name}', globals(), locals(), [attr], 0)
+                        self.local_pipelines[jsn.get('name')] = jsn
+                        self.local_pipelines[jsn.get('name')]['import'] = __import__(f'LocalPipelines.{import_name}', globals(), locals(), [attr], 0)
                         f.close()
 
         # Create menu bar and add action
@@ -161,9 +187,9 @@ class MainWindow(QMainWindow):
         bids_quality.triggered.connect(self.control_bids_quality)
         self.bids_menu.addAction(bids_quality)
 
-        update_authors = QAction('&Update Authors', self)
-        update_authors.triggered.connect(self.update_authors_of_bids_directory)
-        self.bids_menu.addAction(update_authors)
+        dataset_description = QAction('&Update Dataset Description', self)
+        dataset_description.triggered.connect(self.update_dataset_description)
+        self.bids_menu.addAction(dataset_description)
 
         # add_password = QAction('&Add Password', self)
         # add_password.triggered.connect(self.add_password_to_bids)
@@ -174,18 +200,48 @@ class MainWindow(QMainWindow):
         # self.bids_menu.addAction(remove_password)
 
         self.PipelinesMenu = self.menu_bar.addMenu('&Pipelines')
+        add_pipelines_action = QAction('&Add New Pipelines', self)
+        add_pipelines_action.triggered.connect(self.add_new_pipelines)
+        self.PipelinesMenu.addAction(add_pipelines_action)
 
         for pipe in self.pipelines_name:
             new_action = QAction(f'&{pipe}', self)
             new_action.triggered.connect(lambda checked, arg=pipe: self.launch_pipeline(arg))
             self.PipelinesMenu.addAction(new_action)
-
-        for pipe in self.new_pipelines_name:
+            
+        self.local_pipelines_menu = self.menu_bar.addMenu('&Local Pipelines')        
+        for pipe in self.local_pipelines_name:
             new_action = QAction(f'&{pipe}', self)
-            new_action.triggered.connect(lambda checked, arg=pipe: self.launch_pipeline(arg))
-            self.PipelinesMenu.addAction(new_action)
+            new_action.triggered.connect(lambda checked, arg=pipe: self.launch_local_pipeline(arg))
+            self.local_pipelines_menu.addAction(new_action)
 
         # self.threads_pool = QThreadPool.globalInstance()
+        
+        # self.bids_apps = {}
+        # self.bids_apps_name = []
+
+        # for root, dirs, files in os.walk('BIDS_Apps'):
+        #     for file in files:
+        #         if '.json' in file:
+        #             f = open(pjoin(root,file))
+        #             jsn = json.load(f)
+        #             self.bids_apps_name.append(jsn.get('name'))
+        #             import_name = jsn.get('import_name')
+        #             attr = jsn.get('attr')
+        #             self.bids_apps[jsn.get('name')] = jsn
+        #             self.bids_apps[jsn.get('name')]['import'] = __import__(f'BIDS_apps.{import_name}', globals(), locals(), [attr], 0)
+        #             f.close()
+        
+        # self.bids_apps_menu = self.menu_bar.addMenu('&BIDS-Apps')
+        
+        # add_bids_apps = QAction('&Add new BIDS-Apps', self)
+        # add_bids_apps.triggered.connect(self.add_new_bids_apps)
+        # self.bids_apps_menu.addAction(add_bids_apps)
+        
+        # for app in self.bids_apps_name:
+        #     new_action = QAction(f'&{app}', self)
+        #     new_action.triggered.connect(lambda checked, arg=app: self.launch_bids_apps(arg))
+        #     self.bids_apps_menu.addAction(new_action)
 
         self.init_ui()
 
@@ -215,8 +271,12 @@ class MainWindow(QMainWindow):
 
         self.bids = BIDSHandler(root_dir=self.bids_dir)
         bids_dir_split = self.bids_dir.split('/')
-        self.bids_name = bids_dir_split[len(bids_dir_split)-1]
-        self.bids_lab = QLabel(self.bids_name)
+        self.bids_name_dir = bids_dir_split[len(bids_dir_split)-1]
+        self.dataset_description = self.bids.get_dataset_description()
+        if self.dataset_description.get('Name') == None or self.dataset_description.get('Name') == '':
+            self.bids_lab = QLabel(self.bids_name_dir)
+        else:
+            self.bids_lab = QLabel(self.dataset_description.get('Name'))
         self.bids_lab.setFont(QFont('Calibri', 30))
 
         self.bids_dir_view = BidsDirView(self)
@@ -254,6 +314,8 @@ class MainWindow(QMainWindow):
         # self.nifti_viewer = DefaultNiftiViewer(self)
 
         self.viewer = DefaultViewer(self)
+        
+        self.work_in_progress = WorkInProgress(self)
 
         validator = BIDSValidator()
         if not validator.is_bids(self.bids_dir):
@@ -265,6 +327,7 @@ class MainWindow(QMainWindow):
         self.layout.addWidget(self.bids_metadata, 1, 1)
         self.layout.addWidget(self.bids_actions, 1, 2)
         self.layout.addWidget(self.viewer, 2, 1, 1, 2)
+        self.layout.addWidget(self.work_in_progress, 3, 1, 1, 2)
 
         self.window.setLayout(self.layout)
 
@@ -371,16 +434,17 @@ class MainWindow(QMainWindow):
         self.layout.addWidget(self.bids_metadata, 1, 1)
         self.layout.addWidget(self.bids_actions, 1, 2)
         self.layout.addWidget(self.viewer, 2, 1, 1, 2)
+        self.layout.addWidget(self.work_in_progress, 3, 1, 1, 2)
         self.window = QWidget(self)
         self.setCentralWidget(self.window)
         self.window.setLayout(self.layout)
         self.window.setLayout(self.layout)
 
-
+    
 
     def launch_pipeline(self, pipe):
         """
-        Used to launch a pipeline
+        Used to launch a local pipeline
 
         Parameters
         ----------
@@ -395,9 +459,57 @@ class MainWindow(QMainWindow):
         if self.pipelines.get(pipe) != None:
             self.pipelines[pipe]['import'].launch(self, add_info=self.pipelines[pipe]['add_info'])
             return
+        
+    
+    def update_pipelines(self):
+        self.pipelines = {}
+        self.pipelines_name = []
 
-        if self.new_pipelines.get(pipe) != None:
-            self.new_pipelines[pipe]['import'].launch(self, add_info=self.new_pipelines[pipe]['add_info'])
+        for root, dirs, _ in os.walk('Pipelines'):
+            for d in dirs:
+                if d == 'src':
+                    for r, ds, files in os.walk(pjoin(root,d)):
+                        for file in files:
+                            if '.json' in file:
+                                import_r = r.replace(os.sep,'.')
+                                f = open(pjoin(r,file))
+                                jsn = json.load(f)
+                                self.pipelines_name.append(jsn.get('name'))
+                                import_name = jsn.get('import_name')
+                                attr = jsn.get('attr')
+                                self.pipelines[jsn.get('name')] = jsn
+                                self.pipelines[jsn.get('name')]['import'] = __import__(f'{import_r}.{import_name}', globals(), locals(), [attr], 0)
+                                f.close()
+        
+        # self.PipelinesMenu.deleteLater()
+                                
+        self.PipelinesMenu.clear()
+        add_pipelines_action = QAction('&Add New Pipelines', self)
+        add_pipelines_action.triggered.connect(self.add_new_pipelines)
+        self.PipelinesMenu.addAction(add_pipelines_action)
+
+        for pipe in self.pipelines_name:
+            new_action = QAction(f'&{pipe}', self)
+            new_action.triggered.connect(lambda checked, arg=pipe: self.launch_pipeline(arg))
+            self.PipelinesMenu.addAction(new_action)
+
+
+    def launch_local_pipeline(self, pipe):
+        """
+        Used to launch a local pipeline
+
+        Parameters
+        ----------
+        pipe : a pipeline
+            GUI to allow the user to run a pipeline on the database
+
+        Returns
+        -------
+        None.
+
+        """
+        if self.local_pipelines.get(pipe) != None:
+            self.local_pipelines[pipe]['import'].launch(self, add_info=self.local_pipelines[pipe]['add_info'])
             return
 
 
@@ -495,7 +607,7 @@ class MainWindow(QMainWindow):
         self.bids_quality_controler.show()
 
 
-    def update_authors_of_bids_directory(self):
+    def update_dataset_description(self):
         """
         Update the authors of the Database
 
@@ -504,20 +616,448 @@ class MainWindow(QMainWindow):
         None.
 
         """
-        logging.info("update_authors")
-        if hasattr(self, 'updateAuthors_win'):
-            del self.updateAuthors_win
-        self.updateAuthors_win = UpdateAuthors(self)
-        self.updateAuthors_win.show()
+        if hasattr(self, 'updateDatasetDescription_win'):
+            del self.updateDatasetDescription_win
+        self.updateDatasetDescription_win = UpdateDatasetDescription(self)
+        self.updateDatasetDescription_win.show()
 
 
-    def add_password_to_bids(self):
+    def add_new_pipelines(self):
+        if hasattr(self, 'add_new_pipelines_win'):
+            del self.add_new_pipelines_win
+        self.add_new_pipelines_win = AddNewPipelinesWindow(self)
+        self.add_new_pipelines_win.show()
+        
+        
+    def launch_bids_apps(self):
         pass
 
 
-    def remove_password_to_bids(self):
-        pass
 
+# =============================================================================
+# Add New Pipelines
+# =============================================================================
+class AddNewPipelinesWindow(QMainWindow):
+    """
+    """
+    
+    def __init__(self, parent):
+        """
+        
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.setMinimumSize(QSize(700,700))
+
+        self.setWindowTitle("Add New Pipeline")
+        
+        self.parent = parent
+        
+        self.repos = self.get_github_repositories()
+        
+        # Create widgets for each repositories
+        repos_widget = []
+        for repo in self.repos:
+            repo_widget = GitHubRepositoryWidget(self, repo)
+            repos_widget.append(repo_widget)
+        
+        layout = QVBoxLayout()
+        for repo in repos_widget:
+            layout.addWidget(repo)
+            
+        vertical_spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
+        layout.addItem(vertical_spacer)
+        
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setAutoFillBackground(True)
+        scroll_area.setBackgroundRole(QPalette.Base)
+        
+        scroll_area.setLayout(layout)
+        
+        self.setCentralWidget(scroll_area)
+        
+    def get_github_repositories(self):
+        url = 'https://github.com/orgs/BMAT-Apps/repositories'
+        html = requests.get(url)
+        soup = BeautifulSoup(html.content, 'html5lib')
+        
+        # Find all repositories
+        repos = soup.find('div', {'class':'org-repos repo-list'})        
+        list_repos = [item for item in repos.findAll('div', {'class':'flex-auto', 'data-view-component':True})]
+        
+        repos_dic = []
+        for repo in list_repos:
+            rep = {}
+            rep['Name'] = repo.h3.a.text.strip()
+            rep['href'] = repo.h3.a['href']
+            rep['desc'] = repo.p.text.strip()
+            repos_dic.append(rep)
+            
+        return repos_dic
+            
+
+# =============================================================================
+# Github repository Widget
+# =============================================================================
+class GitHubRepositoryWidget(QWidget):
+    """
+    """
+    
+    def __init__(self, parent, repo):
+        """
+        
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        
+        self.repo = repo
+        
+        self.setMinimumWidth(650)
+        
+        self.repo_button = QPushButton(repo.get('Name'))
+        self.repo_button.setFont(QFont('Calibri', 20))
+        self.repo_button.clicked.connect(self.repo_widget)
+        
+        self.description = QLabel(repo.get('desc'))
+        self.description.setFont(QFont('Calibri', 13))
+        self.description.setWordWrap(True)
+        
+        hspacer = QSpacerItem(20, 40, QSizePolicy.Expanding, QSizePolicy.Minimum)  
+        
+        layout = QVBoxLayout()
+        lay = QHBoxLayout()
+        lay.addWidget(self.repo_button)
+        lay.addItem(hspacer)
+        layout.addLayout(lay)
+        layout.addWidget(self.description)
+        
+        self.setLayout(layout)
+        self.setAutoFillBackground(True)
+        self.setBackgroundRole(QPalette.Background)
+        
+    def repo_widget(self):
+        if hasattr(self, 'repo_widget_win'):
+            del self.repo_widget_win
+        self.repo_widget_win = RepositoryWidget(self.parent, self.repo)
+        self.repo_widget_win.show()
+        self.parent.hide()
+
+    
+    
+# =============================================================================
+# RepositoryWidget
+# =============================================================================
+class RepositoryWidget(QMainWindow):
+    """
+    """
+    
+    def __init__(self, parent, repo):
+        """
+        
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+        repo_ref : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.repo = repo
+        
+        self.window = QWidget(self)
+        
+        self.window.setMinimumSize(QSize(1200, 700))
+        self.setWindowTitle(self.repo.get('Name'))
+        
+        self.back_button = QPushButton('Back')
+        self.back_button.clicked.connect(self.back)
+        
+        self.repo_name = QLabel(self.repo.get('Name'))
+        self.repo_name.setFont(QFont('Calibri', 30))
+        
+        self.description = QLabel(self.repo.get('desc'))
+        self.description.setFont(QFont('Calibri', 15))
+        self.description.setWordWrap(True)
+        
+        if self.repo.get('Name') not in self.parent.parent.pipelines_name:
+            self.pipeline_button = QPushButton('Get Pipeline')
+            self.pipeline_button.clicked.connect(self.get_pipeline)
+        else:
+            self.pipeline_button = QPushButton('Update Pipeline')
+            self.pipeline_button.clicked.connect(self.update_pipeline)
+        
+        hspacer1 = QSpacerItem(20, 40, QSizePolicy.Expanding, QSizePolicy.Minimum) 
+        hspacer2 = QSpacerItem(20, 40, QSizePolicy.Expanding, QSizePolicy.Minimum) 
+        
+        # readme_url = f'https://raw.githubusercontent.com/BIDS-Apps/{self.repo.get("Name")}/main/README.md'
+        
+        # readme = QTextEdit()
+        
+        # readme_raw = requests.get(readme_url)
+        
+        # readme_html = markdown.markdown(readme_raw.text)
+        
+        # readme.setHtml(readme_html)
+        
+        url = f'https://github.com/BMAT-Apps/{self.repo.get("Name")}'
+        # url = 'https://github.com/ColinVDB/BMAT'
+        
+        # html = requests.get(url)
+        # soup = BeautifulSoup(html.content, 'html5lib')
+        
+        # # Find all repositories
+        # readme_html = soup.find('article', {'class':'markdown-body entry-content container-lg', 'itemprop':'text'})
+        # readme = QTextEdit()
+        # readme.setHtml(str(readme_html))
+        
+        web = QWebEngineView()
+        web.load(QUrl(url))
+        
+        layout = QVBoxLayout()
+        lay1 = QHBoxLayout()
+        lay1.addWidget(self.back_button)
+        lay1.addItem(hspacer1)
+        lay = QHBoxLayout()
+        lay.addWidget(self.repo_name)
+        lay.addItem(hspacer2)
+        lay.addWidget(self.pipeline_button)
+        layout.addLayout(lay1)
+        layout.addLayout(lay)
+        layout.addWidget(self.description)
+        layout.addWidget(web)
+        
+        self.window.setLayout(layout)
+        
+        self.setCentralWidget(self.window)
+        
+        
+    def get_pipeline(self):
+        self.thread = QThread()
+        self.worker = AddPipelineWorker(self.repo)
+        self.worker.moveToThread(self.thread)
+        self.thread.started.connect(self.worker.run)
+        self.worker.in_progress.connect(self.add_update_in_progress)
+        self.worker.finished.connect(self.update_pipelines)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.start()
+    
+    
+    def update_pipeline(self):
+        self.thread = QThread()
+        self.worker = UpdatePipelineWorker(self.repo)
+        self.worker.moveToThread(self.thread)
+        self.thread.started.connect(self.worker.run)
+        self.worker.in_progress.connect(self.add_update_in_progress)
+        self.worker.finished.connect(self.update_pipelines)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.start()
+        
+    def update_pipelines(self):
+        self.parent.parent.update_pipelines()
+    
+    
+    def back(self):
+        self.parent.show()
+        self.close()
+        self.deleteLater()
+        
+        
+    def add_update_in_progress(self, in_progress):
+        if 'Add' in in_progress[0]:
+            if in_progress[1]:
+                if hasattr(self, 'add_win'):
+                    self.add_win.deleteLater()
+                    del self.add_win
+                self.add_win = AddUpdatePipelineWindow(self, self.repo.get('Name'), 'Add')
+                self.add_win.show()
+            else:
+                if not hasattr(self, 'add_win'):
+                    pass
+                else:
+                    self.add_win.update(in_progress)
+            
+        elif 'Update' in in_progress[0]:
+            if in_progress[1]:
+                if hasattr(self, 'add_win'):
+                    self.add_win.deleteLater()
+                    del self.add_win
+                self.add_win = AddUpdatePipelineWindow(self, self.repo.get('Name'), 'Update')
+                self.add_win.show()
+            else:
+                if not hasattr(self, 'add_win'):
+                    pass
+                else:
+                    self.add_win.update(in_progress)
+            
+        else:
+            if not hasattr(self, 'add_win'):
+                pass
+            else:
+                self.add_win.update(in_progress)
+                
+                
+                
+# =============================================================================
+# AddUpdatePipelineWindow
+# =============================================================================
+class AddUpdatePipelineWindow(QMainWindow):
+    """
+    """
+    
+    def __init__(self, parent, name, check):
+        """
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+        name : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        
+        if check == 'Add':
+            self.setWindowTitle(f"Add {name}")
+        elif check == 'Update':
+            self.setWindowTitle(f'Update {name}')
+        else:
+            self.setWindowTitle('{name} ?')
+            
+        self.window = QWidget()
+        
+        self.git_working_gif = QMovie('Pictures/roll_load.gif')
+        self.git_working_gif.setScaledSize(QSize(25,25))
+        
+        self.python_working_gif = QMovie('Pictures/roll_load.gif')
+        self.python_working_gif.setScaledSize(QSize(25,25))
+        
+        self.docker_working_gif = QMovie('Pictures/roll_load.gif')
+        self.docker_working_gif.setScaledSize(QSize(25,25))
+        
+        self.working_gif = QMovie('Pictures/roll_load.gif')
+        self.working_gif.setScaledSize(QSize(25,25))
+        
+        self.check_icon = QPixmap('Pictures/check.png')
+        self.check_icon = self.check_icon.scaled(QSize(20,20))
+        
+        git_lab = QLabel('Git')
+        self.git_check = QLabel()
+        self.git_check.setMovie(self.git_working_gif)
+        
+        python_lab = QLabel('Python requirements')
+        self.python_check = QLabel()
+        self.python_check.setMovie(self.python_working_gif)
+        
+        docker_lab = QLabel('docker')
+        self.docker_check = QLabel()
+        self.docker_check.setMovie(self.docker_working_gif)
+        
+        self.general_check = QLabel()
+        self.general_check.setMovie(self.working_gif)
+        
+        self.working_gif.start()
+        
+        layout = QGridLayout()
+        layout.addWidget(git_lab,0,0,1,1)
+        layout.addWidget(self.git_check,0,1,1,1)
+        layout.addWidget(python_lab,1,0,1,1)
+        layout.addWidget(self.python_check,1,1,1,1)
+        layout.addWidget(docker_lab,2,0,1,1)
+        layout.addWidget(self.docker_check,2,1,1,1)
+        layout.addWidget(self.general_check,3,0,1,2)
+        
+        self.window.setLayout(layout)
+        
+        self.setCentralWidget(self.window)
+        
+        self.center()
+        
+        
+    def update(self, in_progress):
+        if 'repo' in in_progress[0]:
+            if in_progress[1]:
+                self.git_working_gif.start()
+            else:
+                self.git_working_gif.stop()
+                self.git_check.clear()
+                self.git_check.setPixmap(self.check_icon)
+        elif 'python' in in_progress[0]:
+            if in_progress[1]:
+                self.python_working_gif.start()
+            else:
+                self.python_working_gif.stop()
+                self.python_check.clear()
+                self.python_check.setPixmap(self.check_icon)
+        elif 'docker' in in_progress[0]:
+            if in_progress[1]:
+                self.docker_working_gif.start()
+            else:
+                self.docker_working_gif.stop()
+                self.docker_check.clear()
+                self.docker_check.setPixmap(self.check_icon)
+        elif 'Add' in in_progress[0] or 'Update' in in_progress[0]:
+            if in_progress[1]:
+                pass
+            else:
+                self.working_gif.stop()
+                self.general_check.clear()
+                self.general_check.setPixmap(self.check_icon)
+        else:
+            pass
+    
+    
+    def center(self):
+        """
+
+
+        Returns
+        -------
+        None.
+
+        """
+        qr = self.frameGeometry()
+        cp = QDesktopWidget().availableGeometry().center()
+        qr.moveCenter(cp)
+        self.move(qr.topLeft())
+    
+    
 
 
 # =============================================================================
@@ -724,6 +1264,189 @@ class BIDSQualityControlWindow(QMainWindow):
 
 
 
+# =============================================================================
+# Work in Progress
+# =============================================================================
+class WorkInProgress(QWidget):
+    """
+    Representation of the BIDS directory
+    """
+
+
+    def __init__(self, parent):
+        """
+        Create an instance of the Viewer of the BIDS directory
+
+        Parameters
+        ----------
+        parent : MainWindow
+            pointer towards the main window (parent of this widget)
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+        # self.threads_pool = self.parent.threads_pool
+        self.setWindowTitle('Work in Progress')
+        self.setMinimumSize(700, 50)
+        
+        self.working_lab = QLabel(self)
+        self.working_gif = QMovie('Pictures/loading_inf.gif')
+        self.working_gif.setScaledSize(QSize(40,40))
+        # self.working_lab.setMovie(self.working_gif)
+        # self.working_gif.start()
+        
+        self.working_details_lab = QLabel(self)
+        self.working_details_lab.resize(650, 40)
+        self.working_details_lab.setAlignment(Qt.AlignLeft)
+        self.working_details_lab.setFont(QFont('Calibri', 10))
+        # self.working_details_lab.setText("Work in progress")
+        
+        self.working_details = []
+        
+        layout = QHBoxLayout()
+        layout.addWidget(self.working_lab)
+        layout.addWidget(self.working_details_lab)
+        self.setLayout(layout)
+        
+    def update_work_in_progress(self,in_progress):
+        if in_progress[1]:
+            self.working_details.append(in_progress[0])
+        else:
+            self.working_details.remove(in_progress[0])
+        self.update_animation()
+    
+    
+    def update_animation(self):
+        if self.working_details == []:
+            self.working_gif.stop()
+            self.working_lab.clear()
+            self.working_details_lab.clear()
+        else:
+            self.working_lab.setMovie(self.working_gif)
+            self.working_gif.start()
+            self.working_details_lab.setText(('['+''.join(i+',' for i in self.working_details))[:-1]+']')        
+ 
+
+
+# =============================================================================
+# AddNewBIDSApps
+# =============================================================================
+class AddNewBidsApps(QWidget):
+    """
+    Representation of the BIDS directory
+    """
+
+
+    def __init__(self, parent):
+        """
+        Create an instance of the Viewer of the BIDS directory
+
+        Parameters
+        ----------
+        parent : MainWindow
+            pointer towards the main window (parent of this widget)
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+        # self.threads_pool = self.parent.threads_pool
+        self.setWindowTitle('Add New BIDS-Apps')
+        
+        label = QLabel(self)
+        label.setText("test")
+        
+        button = QPushButton("Add New BIDS-Apps")
+        button.clicked.connect(self.add_new_bids_apps)
+        
+        layout = QVBoxLayout()
+        layout.addWidget(label)
+        layout.addWidget(button)
+        
+        self.setLayout(layout)
+        self.center()
+    
+    def add_new_bids_apps(self):
+        if hasattr(self, 'add_new_bids_apps_info_win'):
+            del self.add_new_bids_apps_info_win
+        self.add_new_bids_apps_info_win = AddNewBidsApps_info(self)
+        self.add_new_bids_apps_info_win.show()
+        
+    
+    def center(self):
+        """
+        Used to center the window
+
+        Returns
+        -------
+        None.
+
+        """
+        qr = self.frameGeometry()
+        cp = QDesktopWidget().availableGeometry().center()
+        qr.moveCenter(cp)
+        self.move(qr.topLeft())
+        
+
+
+# =============================================================================
+# AddNewBIDSApps_info
+# =============================================================================
+class AddNewBidsApps_info(QWidget):
+    """
+    Representation of the BIDS directory
+    """
+
+
+    def __init__(self, parent):
+        """
+        Create an instance of the Viewer of the BIDS directory
+
+        Parameters
+        ----------
+        parent : MainWindow
+            pointer towards the main window (parent of this widget)
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+        # self.threads_pool = self.parent.threads_pool
+        self.setWindowTitle('Add New BIDS-Apps')
+        self.setMinimumSize(700, 700)
+        
+        
+        self.center()
+        
+    def center(self):
+        """
+        Used to center the window
+
+        Returns
+        -------
+        None.
+
+        """
+        qr = self.frameGeometry()
+        cp = QDesktopWidget().availableGeometry().center()
+        qr.moveCenter(cp)
+        self.move(qr.topLeft())
+        
+
+
 
 # =============================================================================
 # BidsDirView
@@ -874,7 +1597,7 @@ class BidsDirView(QWidget):
                 self.itksnap = QFileDialog.getOpenFileName(self, "Select the path to itksnap")[0]
                 if self.itksnap != None and self.itksnap != '':
                     self.threads.append(QThread())
-                    self.operation = SubprocessWorker(f'{self.itksnap} -g {item_path}')
+                    self.operation = SubprocessWorker(f'"{self.itksnap}" -g {item_path}')
                     self.operation.moveToThread(self.threads[-1])
                     self.threads[-1].started.connect(self.operation.run)
                     self.operation.finished.connect(self.threads[-1].quit)
@@ -886,7 +1609,7 @@ class BidsDirView(QWidget):
                     logging.info(f'No application selected open MRI \n \t Please select itksnap path')
             else:
                 self.threads.append(QThread())
-                self.operation = SubprocessWorker(f'{self.itksnap} -g {item_path}')
+                self.operation = SubprocessWorker(f'"{self.itksnap}" -g {item_path}')
                 self.operation.moveToThread(self.threads[-1])
                 self.threads[-1].started.connect(self.operation.run)
                 self.operation.finished.connect(self.threads[-1].quit)
@@ -947,7 +1670,7 @@ class BidsDirView(QWidget):
             self.itksnap = QFileDialog.getOpenFileName(self, "Select the path to itksnap")[0]
             if self.itksnap != None and self.itksnap != '':
                 self.threads.append(QThread())
-                self.operation = SubprocessWorker(f'{self.itksnap} -g {item_path}')
+                self.operation = SubprocessWorker(f'"{self.itksnap}" -g {item_path}')
                 self.operation.moveToThread(self.threads[-1])
                 self.threads[-1].started.connect(self.operation.run)
                 self.operation.finished.connect(self.threads[-1].quit)
@@ -1023,11 +1746,14 @@ class BidsMetadata(QWidget):
 
         authors_lab = f"Authors: "
         authors = authors if authors != None else []
-        for author in authors:
-            if author == authors[-1]:
-                authors_lab = authors_lab + author
-            else:
-                authors_lab = authors_lab + f'{author}\n         '
+        if len(authors) <= 3:
+            for author in authors:
+                if author == authors[-1]:
+                    authors_lab = authors_lab + author
+                else:
+                    authors_lab = authors_lab + f'{author}\n            '
+        else:
+            authors_lab = authors_lab + authors[0] + ' et al.'
         self.authors = QLabel(authors_lab)
         self.authors.setFont(QFont('Calibri', 12))
         layout.addWidget(self.authors)
@@ -1050,15 +1776,21 @@ class BidsMetadata(QWidget):
         dataset_description = self.bids.get_dataset_description()
         bids_version = dataset_description.get('BIDSVersion')
         authors = dataset_description.get('Authors')
-        authors_lab = f"Authors: "
+        authors_lab = "Authors: "
         authors = authors if authors != None else []
-        for author in authors:
-            if author == authors[-1]:
-                authors_lab = authors_lab + author
-            else:
-                authors_lab = authors_lab + f'{author}\n         '
+        if len(authors) <= 3:
+            for author in authors:
+                if author == authors[-1]:
+                    authors_lab = authors_lab + author
+                else:
+                    authors_lab = authors_lab + f'{author}\n         '
+        else:
+            authors_lab = authors_lab + authors[0] + ' et al.'
         self.bids_version.setText(f"BIDSVersion: {bids_version}")
         self.authors.setText(authors_lab)
+        
+        name = dataset_description.get('Name')
+        self.parent.bids_lab.setText(name)
 
 
 
@@ -1271,10 +2003,10 @@ class BidsActions(QWidget):
 
         """
         logging.info("update_authors")
-        if hasattr(self, 'updateAuthors_win'):
-            del self.updateAuthors_win
-        self.updateAuthors_win = UpdateAuthors(self)
-        self.updateAuthors_win.show()
+        if hasattr(self, 'updateDatasetDescription_win'):
+            del self.updateDatasetDescription_win
+        self.updateDatasetDescription_win = UpdateDatasetDescription(self)
+        self.updateDatasetDescription_win.show()
 
 
     def setEnabledButtons(self, enabled):
@@ -1374,6 +2106,7 @@ class RemoveWindow(QMainWindow):
                     self.operation = OperationWorker(self.bids.delete_session, args=[subject, session], kwargs={'delete_sourcedata':True})
                     self.operation.moveToThread(self.thread)
                     self.thread.started.connect(self.operation.run)
+                    self.operation.in_progress.connect(self.is_in_progress)
                     self.operation.finished.connect(self.thread.quit)
                     self.operation.finished.connect(self.operation.deleteLater)
                     self.thread.finished.connect(self.thread.deleteLater)
@@ -1389,6 +2122,7 @@ class RemoveWindow(QMainWindow):
                     self.operation = OperationWorker(self.bids.delete_subject, args=[subject], kwargs={'delete_sourcedata':True})
                     self.operation.moveToThread(self.thread)
                     self.thread.started.connect(self.operation.run)
+                    self.operation.in_progress.connect(self.is_in_progress)
                     self.operation.finished.connect(self.thread.quit)
                     self.operation.finished.connect(self.operation.deleteLater)
                     self.thread.finished.connect(self.thread.deleteLater)
@@ -1406,6 +2140,7 @@ class RemoveWindow(QMainWindow):
                     self.operation = OperationWorker(self.bids.delete_session, args=[subject, session])
                     self.operation.moveToThread(self.thread)
                     self.thread.started.connect(self.operation.run)
+                    self.operation.in_progress.connect(self.is_in_progress)
                     self.operation.finished.connect(self.thread.quit)
                     self.operation.finished.connect(self.operation.deleteLater)
                     self.thread.finished.connect(self.thread.deleteLater)
@@ -1419,6 +2154,7 @@ class RemoveWindow(QMainWindow):
                     self.operation = OperationWorker(self.bids.delete_subject, args=[subject])
                     self.operation.moveToThread(self.thread)
                     self.thread.started.connect(self.operation.run)
+                    self.operation.in_progress.connect(self.is_in_progress)
                     self.operation.finished.connect(self.thread.quit)
                     self.operation.finished.connect(self.operation.deleteLater)
                     self.thread.finished.connect(self.thread.deleteLater)
@@ -1428,6 +2164,9 @@ class RemoveWindow(QMainWindow):
                     )
 
         self.hide()
+        
+    def is_in_progress(self, in_progress):
+        self.parent.parent.work_in_progress.update_work_in_progress(in_progress)
 
 
     def center(self):
@@ -1560,6 +2299,7 @@ class AddWindow(QMainWindow):
         self.worker = AddWorker(self.bids, self.list_to_add)
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run)
+        self.worker.in_progress.connect(self.is_in_progress)
         self.worker.finished.connect(self.thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
@@ -1567,7 +2307,11 @@ class AddWindow(QMainWindow):
         self.thread.start()
 
         self.hide()
-
+        
+    
+    def is_in_progress(self, in_progress):
+        self.parent.parent.work_in_progress.update_work_in_progress(in_progress)
+    
 
     def end_add(self):
         """
@@ -1733,6 +2477,7 @@ class RenameSubject(QMainWindow):
         self.operation = OperationWorker(self.bids.rename_subject, args=[old_sub, new_sub])
         self.operation.moveToThread(self.thread)
         self.thread.started.connect(self.operation.run)
+        self.operation.in_progress.connect(self.is_in_progress)
         self.operation.finished.connect(self.thread.quit)
         self.operation.finished.connect(self.operation.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
@@ -1743,6 +2488,10 @@ class RenameSubject(QMainWindow):
         logging.info(f"sub-{old_sub} renamed to sub-{new_sub}")
 
         self.hide()
+        
+        
+    def is_in_progress(self, in_progress):
+        self.parent.parent.parent.work_in_progress.update_work_in_progress(in_progress)
 
 
     def center(self):
@@ -1828,6 +2577,7 @@ class RenameSession(QMainWindow):
         self.operation = OperationWorker(self.bids.rename_session, args=[sub, old_ses, new_ses])
         self.operation.moveToThread(self.thread)
         self.thread.started.connect(self.operation.run)
+        self.operation.in_progress.connect(self.is_in_progress)
         self.operation.finished.connect(self.thread.quit)
         self.operation.finished.connect(self.operation.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
@@ -1838,6 +2588,10 @@ class RenameSession(QMainWindow):
         logging.info(f"ses-{old_ses} renamed to ses-{new_ses} for sub-{sub}")
 
         self.hide()
+        
+        
+    def is_in_progress(self, in_progress):
+        self.parent.parent.parent.work_in_progress.update_work_in_progress(in_progress)
 
 
     def center(self):
@@ -1919,6 +2673,7 @@ class RenameSequence(QMainWindow):
         self.operation = OperationWorker(self.bids.rename_sequence, args=[old_seq, new_seq])
         self.operation.moveToThread(self.thread)
         self.thread.started.connect(self.operation.run)
+        self.operation.in_progress.connect(self.is_in_progress)
         self.operation.finished.connect(self.thread.quit)
         self.operation.finished.connect(self.operation.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
@@ -1929,6 +2684,10 @@ class RenameSequence(QMainWindow):
         logging.info(f"old {old_seq} renamed to new {new_seq}")
 
         self.hide()
+        
+        
+    def is_in_progress(self, in_progress):
+        self.parent.parent.parent.work_in_progress.update_work_in_progress(in_progress)
 
 
     def center(self):
@@ -1946,11 +2705,10 @@ class RenameSequence(QMainWindow):
         self.move(qr.topLeft())
 
 
-
 # =============================================================================
-# UpdateAuthors
+# UpdateDatasetDescription
 # =============================================================================
-class UpdateAuthors(QMainWindow):
+class UpdateDatasetDescription(QMainWindow):
     """
     """
 
@@ -1973,25 +2731,42 @@ class UpdateAuthors(QMainWindow):
         self.parent = parent
         self.bids = self.parent.bids
         # self.threads_pool = self.parent.threads_pool
+        self.setMinimumSize(QSize(750,650))
 
-        self.setWindowTitle("Update Authors")
+        self.setWindowTitle("Update Dataset Description")
         self.window = QWidget(self)
         self.setCentralWidget(self.window)
         self.center()
+        
+        self.dataset_description = self.bids.get_dataset_description()
 
-        self.authors = QLineEdit(self)
-        self.authors.setPlaceholderText("Authors")
-        self.update_authors_button = QPushButton("Update Authors")
-        self.update_authors_button.clicked.connect(self.update_authors)
+        self.tabs = QTabWidget(self)
+        
+        self.required_tab = UpdateDatasetDescription_RequiredTab(self)
+        self.tabs.addTab(self.required_tab, "Required")
+        
+        self.recommended_tab = UpdateDatasetDescription_RecommendedTab(self)
+        scroll_area_recommended_tab = QScrollArea()
+        scroll_area_recommended_tab.setWidget(self.recommended_tab)
+        scroll_area_recommended_tab.setWidgetResizable(True)
+        scroll_area_recommended_tab.setAutoFillBackground(True)
+        scroll_area_recommended_tab.setBackgroundRole(QPalette.Base)
+        self.tabs.addTab(scroll_area_recommended_tab, "Recommended")
+        
+        self.optional_tab = UpdateDatasetDescription_OptionalTab(self)
+        self.tabs.addTab(self.optional_tab, "Optional")
 
+        self.update_dataset_description_button = QPushButton("Update Dataset Description")
+        self.update_dataset_description_button.clicked.connect(self.update_dataset_description)
+        
         layout = QVBoxLayout()
-        layout.addWidget(self.authors)
-        layout.addWidget(self.update_authors_button)
+        layout.addWidget(self.tabs)
+        layout.addWidget(self.update_dataset_description_button)
 
         self.window.setLayout(layout)
-
-
-    def update_authors(self):
+        
+        
+    def update_dataset_description(self):
         """
 
 
@@ -2000,19 +2775,17 @@ class UpdateAuthors(QMainWindow):
         None.
 
         """
-        authors = self.authors.text()
-        if ',' in authors:
-            authors_list = authors.split(',')
-        else:
-            authors_list = [authors]
+        required_dic = self.required_tab.get_values()
+        recommended_dic = self.recommended_tab.get_values()
+        optional_dic = self.optional_tab.get_values()
+        new_dataset_description = dict(required_dic, **recommended_dic, **optional_dic)
+                
         self.parent.setEnabled(False)
         self.thread = QThread()
-        self.operation = OperationWorker(self.bids.update_authors_to_dataset_description, args=[self.bids.root_dir], kwargs={'authors':authors_list})
-        logging.debug('OperationWorker instanciated')
+        self.operation = OperationWorker(self.bids.update_dataset_description, args=[], kwargs={'dataset_description':new_dataset_description})
         self.operation.moveToThread(self.thread)
-        logging.debug('OperationWorker moved to thread')
         self.thread.started.connect(self.operation.run)
-        logging.debug('Thread started and launching operation.run')
+        self.operation.in_progress.connect(self.is_in_progress)
         self.operation.finished.connect(self.thread.quit)
         self.operation.finished.connect(self.operation.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
@@ -2020,23 +2793,16 @@ class UpdateAuthors(QMainWindow):
         self.thread.finished.connect(
             lambda: self.parent.setEnabled(True)
         )
-        self.thread.finished.connect(lambda: self.end_update())
-        logging.info(f"Updating {authors} as BIDS directory authors")
-        self.parent.bids_metadata.update_metadata()
+        self.thread.finished.connect(self.update_metadata)
 
         self.hide()
+        
+        
+    def is_in_progress(self, in_progress):
+        self.parent.work_in_progress.update_work_in_progress(in_progress)
 
 
-    def end_update(self):
-        """
-
-
-        Returns
-        -------
-        None.
-
-        """
-        logging.info('Thread ended')
+    def update_metadata(self):
         self.parent.bids_metadata.update_metadata()
 
 
@@ -2053,6 +2819,811 @@ class UpdateAuthors(QMainWindow):
         cp = QDesktopWidget().availableGeometry().center()
         qr.moveCenter(cp)
         self.move(qr.topLeft())
+        
+
+
+# =============================================================================
+# UpdateDatasetDescription Required Tab
+# =============================================================================
+class UpdateDatasetDescription_RequiredTab(QWidget):
+    """
+    """
+
+
+    def __init__(self, parent):
+        """
+
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+        # self.threads_pool = self.parent.threads_pool
+        self.dataset_description = self.parent.dataset_description
+        
+        name_lab = QLabel('The name of the dataset.')
+        name_lab.setWordWrap(True)
+        self.name = QLineEdit(self)
+        if self.dataset_description.get('Name') == None or self.dataset_description.get('Name') == '':
+            self.name.setPlaceholderText(self.parent.parent.bids_name_dir)
+        else:
+            self.name.setPlaceholderText(self.dataset_description.get('Name'))
+        
+        BIDSVersion_lab = QLabel('The version of the BIDS standard used (1.2.2 by default).')
+        BIDSVersion_lab.setWordWrap(True)
+        self.BIDSVersion = QLineEdit(self)
+        if self.dataset_description.get('BIDSVersion') == None or self.dataset_description.get('BIDSVersion') == '':
+            self.BIDSVersion.setPlaceholderText("BIDS Version of the dataset")
+        else:
+            self.BIDSVersion.setPlaceholderText(self.dataset_description.get('BIDSVersion'))
+            
+        vertical_spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)        
+
+        layout = QVBoxLayout()
+        layout.addWidget(name_lab)
+        layout.addWidget(self.name)
+        layout.addWidget(BIDSVersion_lab)
+        layout.addWidget(self.BIDSVersion)
+        layout.addItem(vertical_spacer)
+
+        self.setLayout(layout)
+        
+        
+    def get_values(self):
+        required_dic = {}
+        if self.name.text() != '':
+            required_dic['Name'] = self.name.text()
+        else:
+            if self.dataset_description.get('Name') == None or self.dataset_description.get('Name') == '':
+                required_dic['Name'] = self.parent.parent.bids_name_dir
+            else:
+                required_dic['Name'] = self.dataset_description.get('Name')
+        if self.BIDSVersion.text() != '':
+            required_dic['BIDSVersion'] = self.BIDSVersion.text()
+        else:
+            required_dic['BIDSVersion'] = self.dataset_description.get('BIDSVersion')
+            
+        return required_dic
+        
+        
+        
+# =============================================================================
+# UpdateDatasetDescription Recommended Tab
+# =============================================================================
+class UpdateDatasetDescription_RecommendedTab(QWidget):
+    """
+    """
+
+
+    def __init__(self, parent):
+        """
+
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+        # self.threads_pool = self.parent.threads_pool
+        self.dataset_description = self.parent.dataset_description
+                
+        HEDVersion_lab = QLabel('If HED tags are used: The version of the HED schema used to validate HED tags for study.')
+        HEDVersion_lab.setWordWrap(True)
+        self.HEDVersion = QLineEdit(self)
+        if self.dataset_description.get('HEDVersion') == None or self.dataset_description.get('HEDVersion') == '':
+            self.HEDVersion.setPlaceholderText("HEDVersion")
+        else:
+            self.HEDVersion.setPlaceholderText(self.dataset_description.get('HEDVersion'))
+        
+        dataset_type_lab = QLabel('The interpretation of the dataset. For backwards compatibility, the default value is "raw". \nMust be one of: "raw", "derivative".')
+        dataset_type_lab.setWordWrap(True)
+        self.dataset_type = "raw"
+        self.dataset_type_cb = QComboBox(self)
+        self.dataset_type_cb.addItems(["raw", "derivatives"])
+        self.dataset_type_cb.currentIndexChanged.connect(self.update_dataset_type)        
+        
+        license_lab = QLabel('The license for the dataset. The use of license name abbreviations is RECOMMENDED for specifying a license (see BIDS secification). The corresponding full license text MAY be specified in an additional LICENSE file.')
+        license_lab.setWordWrap(True)
+        self.license = QLineEdit(self)
+        if self.dataset_description.get('License') == None or self.dataset_description.get('License') == '':     
+            self.license.setPlaceholderText('License')
+        else:
+            self.license.setPlaceholderText(self.dataset_description.get('License'))
+       
+        generated_by_lab = QLabel('Used to specify provenance of the dataset.')
+        generated_by_lab.setWordWrap(True)
+        
+        if self.dataset_description.get('GeneratedBy') == None or self.dataset_description.get('GeneratedBy') == "":
+            self.generated_by = [{}]
+        else:
+            self.generated_by = self.dataset_description.get('GeneratedBy')
+        
+        generated_by_sa = QScrollArea()
+        generated_by_sa.setWidgetResizable(True)
+        generated_by_sa.setFixedHeight(300)
+        generated_by_sa.setAutoFillBackground(True)
+        generated_by_sa.setBackgroundRole(QPalette.Background)   
+        
+        generated_by_gb = QGroupBox()
+        generated_by_gb.setBackgroundRole(QPalette.Background)
+        self.generated_by_add_button = QPushButton('Add')
+        self.generated_by_add_button.clicked.connect(lambda :self.add_generated_by_widget(dic={}))
+        
+        self.generated_by_layout = QVBoxLayout()
+        
+        for item in self.generated_by:
+            self.add_generated_by_widget(dic=item)
+            
+        self.generated_by_layout.addWidget(self.generated_by_add_button)
+            
+        generated_by_gb.setLayout(self.generated_by_layout)
+        
+        generated_by_sa.setWidget(generated_by_gb)
+        
+        source_datasets_lab = QLabel('Used to specify provenance of the dataset.')
+        source_datasets_lab.setWordWrap(True)
+        
+        if self.dataset_description.get('SourceDatasets') == None or self.dataset_description.get('SourceDatasets') == "":
+            self.source_datasets = [{}]
+        else:
+            self.source_datasets = self.dataset_description.get('SourceDatasets')
+        
+        source_datasets_sa = QScrollArea()
+        source_datasets_sa.setWidgetResizable(True)
+        source_datasets_sa.setFixedHeight(300)
+        source_datasets_sa.setAutoFillBackground(True)
+        source_datasets_sa.setBackgroundRole(QPalette.Background)   
+        
+        source_datasets_gb = QGroupBox()
+        source_datasets_gb.setBackgroundRole(QPalette.Background)
+        self.source_datasets_add_button = QPushButton('Add')
+        self.source_datasets_add_button.clicked.connect(lambda :self.add_source_datasets_widget(dic={}))
+        
+        self.source_datasets_layout = QVBoxLayout()
+        
+        for item in self.source_datasets:
+            self.add_source_datasets_widget(dic=item)
+            
+        self.source_datasets_layout.addWidget(self.source_datasets_add_button)
+            
+        source_datasets_gb.setLayout(self.source_datasets_layout)
+        
+        source_datasets_sa.setWidget(source_datasets_gb)
+        
+        vertical_spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)  
+        
+        layout = QVBoxLayout()
+        layout.addWidget(HEDVersion_lab)
+        layout.addWidget(self.HEDVersion)
+        layout.addWidget(dataset_type_lab)
+        layout.addWidget(self.dataset_type_cb)
+        layout.addWidget(license_lab)
+        layout.addWidget(self.license)
+        layout.addWidget(generated_by_lab)
+        layout.addWidget(generated_by_sa)
+        layout.addWidget(source_datasets_lab)
+        layout.addWidget(source_datasets_sa)
+        layout.addItem(vertical_spacer)
+
+        self.setLayout(layout)
+        
+    
+    def update_dataset_type(self, item):
+        if item == 0:
+            self.dataset_type = "raw"
+        else:
+            self.dataset_type = "derivatives"
+            
+            
+    def add_generated_by_widget(self, dic={}):
+        new_generated_by_widget = GeneratedByWidget(self, dic=dic)
+        self.generated_by_layout.insertWidget(self.generated_by_layout.count()-1, new_generated_by_widget)
+        
+    
+    def remove_generated_by_widget(self, widget):
+        self.generated_by_layout.removeWidget(widget)
+        widget.deleteLater()
+        
+        
+    def add_source_datasets_widget(self, dic={}):
+        new_source_dataset = SourceDatasetWidget(self, dic=dic)
+        self.source_datasets_layout.insertWidget(self.source_datasets_layout.count()-1, new_source_dataset)
+        
+        
+    def remove_source_datasets_widget(self, widget):
+        self.source_datasets_layout.removeWidget(widget)
+        widget.deleteLater()
+            
+            
+    def get_values(self):
+        recommended_dic = {}
+        if self.HEDVersion.text() != '':
+            recommended_dic['HEDVersion'] = self.HEDVersion.text()
+        else:
+            if self.dataset_description.get('HEDVersion') != None:
+                recommended_dic['HEDVersion'] = self.dataset_description.get('HEDVersion')
+        recommended_dic['DatasetType'] = self.dataset_type
+        if self.license.text() != '':
+            recommended_dic['License'] = self.license.text()
+        else:
+            if self.dataset_description.get('License') != None:
+                recommended_dic['License'] = self.dataset_description.get('License')
+                
+        generated_by = []
+        for i in range(self.generated_by_layout.count()-1):
+            widget = self.generated_by_layout.itemAt(i).widget()
+            generated_by.append(widget.get_values())
+            
+        recommended_dic['GeneratedBy'] = generated_by
+        
+        source_datasets = []
+        for i in range(self.source_datasets_layout.count()-1):
+            widget = self.source_datasets_layout.itemAt(i).widget()
+            source_datasets.append(widget.get_values())
+            
+        recommended_dic['SourceDatasets'] = source_datasets
+
+        return recommended_dic
+        
+
+
+# =============================================================================
+# GeneratedBy Widget
+# =============================================================================
+class GeneratedByWidget(QWidget):
+    """
+    """
+    
+    
+    def __init__(self, parent, dic={}):
+        """
+        
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+        self.dataset_description = self.parent.dataset_description
+        self.dic = dic
+        
+        self.delete_button = QPushButton('Delete')
+        self.delete_button.clicked.connect(lambda : self.parent.remove_generated_by_widget(self))
+        
+        generated_by_name_lab = QLabel('Name of the pipeline or process that generated the outputs. Use "Manual" to indicate the derivatives were generated by hand, or adjusted manually after an initial run of an automated pipeline.')
+        generated_by_name_lab.setWordWrap(True)
+        self.generated_by_name = QLineEdit(self)
+        if self.dic.get('Name') == None or self.dic.get('Name') == "":
+            self.generated_by_name.setPlaceholderText("Name of the pipeline or process")
+        else:
+            self.generated_by_name.setPlaceholderText(self.dic.get('Name'))
+        generated_by_version_lab = QLabel('Version of the pipeline.')
+        generated_by_version_lab.setWordWrap(True)
+        self.generated_by_version = QLineEdit(self)
+        if self.dic.get('Version') == None or self.dic.get('Version') == "":
+            self.generated_by_version.setPlaceholderText("Version of Pipelines")
+        else:
+            self.generated_by_version.setPlaceholderText(self.dic.get('Version'))
+        generated_by_description_lab = QLabel('Plain-text description of the pipeline or process that generated the outputs (Recommended if Manual).')
+        generated_by_description_lab.setWordWrap(True)
+        self.generated_by_description = QLineEdit(self)
+        if self.dic.get('Description') == None or self.dic.get('Description') == "":
+            self.generated_by_description.setPlaceholderText("Description of the process that generated outputs")
+        else:
+            self.generated_by_description.setPlaceholderText(self.dic.get('Description'))
+        generated_by_codeURL_lab = QLabel('URL where the code used to generate the dataset may be found.')
+        generated_by_codeURL_lab.setWordWrap(True)
+        self.generated_by_codeURL = QLineEdit(self)
+        if self.dic.get('CodeURL') == None or self.dic.get('CodeURL') == "":
+            self.generated_by_codeURL.setPlaceholderText("URL where the code used to generate the dataset")
+        else:
+            self.generated_by_codeURL.setPlaceholderText(self.dic.get('CodeURL'))
+        generated_by_container_lab = QLabel('Used to specify the location and relevant attributes of software container image used to produce the dataset. ')
+        generated_by_container_lab.setWordWrap(True)
+        self.generated_by_container_widget = CollapsibleBox(parent=self, title='Container')
+        if self.dic.get('Container') == None or self.dic.get('Container') == "":
+            self.generated_by_container = {}
+        else:
+            self.generated_by_container = self.dic.get('Container')
+        generated_by_container_type_lab = QLabel('Type of the Container.')
+        self.generated_by_container_type = QLineEdit(self)
+        if self.generated_by_container.get('Type') == None or self.generated_by_container.get('Type') == "":
+            self.generated_by_container_type.setPlaceholderText("Type of the Container")
+        else:
+            self.generated_by_container_type.setPlaceholderText(self.generated_by_container.get('Type'))
+        generated_by_container_tag_lab = QLabel("Tag of the Container")
+        self.generated_by_container_tag = QLineEdit(self)
+        if self.generated_by_container.get('Tag') == None or self.generated_by_container.get('Tag') == "":
+            self.generated_by_container_type.setPlaceholderText("Tag of the Container")
+        else:
+            self.generated_by_container_type.setPlaceholderText(self.generated_by_container.get('Tag'))
+        generated_by_container_uri_lab = QLabel("URI of the Container")
+        self.generated_by_container_uri = QLineEdit(self)
+        if self.generated_by_container.get('URI') == None or self.generated_by_container.get('URI') == "":
+            self.generated_by_container_type.setPlaceholderText("URI of the Container")
+        else:
+            self.generated_by_container_type.setPlaceholderText(self.generated_by_container.get('URI'))
+        container_layout = QVBoxLayout()
+        container_layout.addWidget(generated_by_container_tag_lab)
+        container_layout.addWidget(self.generated_by_container_tag)
+        container_layout.addWidget(generated_by_container_type_lab)
+        container_layout.addWidget(self.generated_by_container_type)
+        container_layout.addWidget(generated_by_container_uri_lab)
+        container_layout.addWidget(self.generated_by_container_uri)
+        self.generated_by_container_widget.setContentLayout(container_layout)
+        
+        
+        layout = QVBoxLayout()
+        layout.addWidget(self.delete_button)
+        layout.addWidget(generated_by_name_lab)
+        layout.addWidget(self.generated_by_name)
+        layout.addWidget(generated_by_version_lab)
+        layout.addWidget(self.generated_by_version)
+        layout.addWidget(generated_by_description_lab)
+        layout.addWidget(self.generated_by_description)
+        layout.addWidget(generated_by_codeURL_lab)
+        layout.addWidget(self.generated_by_codeURL)
+        layout.addWidget(generated_by_container_lab)
+        layout.addWidget(self.generated_by_container_widget)
+        
+        self.setLayout(layout)
+            
+    
+    def get_values(self):
+        return_dic = {}
+        
+        if self.generated_by_name.text() != "":
+            return_dic['Name'] = self.generated_by_name.text()
+        else:
+            return_dic['Name'] = self.dic.get('Name')
+            
+        if self.generated_by_version.text() != "":
+            return_dic['Version'] = self.generated_by_version.text()
+        else:
+            return_dic['Version'] = self.dic.get('Version')
+            
+        if self.generated_by_description.text() != "":
+            return_dic['Description'] = self.generated_by_description.text()
+        else:
+            return_dic['Description'] = self.dic.get('Description')
+            
+        if self.generated_by_codeURL.text() != "":
+            return_dic['CodeURL'] = self.generated_by_codeURL.text()
+        else:
+            return_dic['CodeURL'] = self.dic.get('CodeURL')
+            
+        container_dic = {}
+        
+        if self.generated_by_container_type.text() != "":
+            container_dic['Type'] = self.generated_by_container_type.text()
+        else:
+            container_dic['Type'] = self.generated_by_container.get('Type')
+            
+        if self.generated_by_container_tag.text() != "":
+            container_dic['Tag'] = self.generated_by_container_tag.text()
+        else:
+            container_dic['Tag'] = self.generated_by_container.get('Tag')
+            
+        if self.generated_by_container_uri.text() != "":
+            container_dic['URI'] = self.generated_by_container_uri.text()
+        else:
+            container_dic['URI'] = self.generated_by_container.get('URI')
+            
+        return_dic['Container'] = container_dic
+        
+        return return_dic
+            
+        
+        
+        
+        
+        
+# =============================================================================
+# SourceDatasetWidget
+# =============================================================================
+class SourceDatasetWidget(QWidget):
+    """
+    """
+    
+    def __init__(self, parent, dic={}):
+        """
+        
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+        self.dataset_description = self.parent.dataset_description
+        self.dic = dic
+
+        self.delete_button = QPushButton('Delete')
+        self.delete_button.clicked.connect(lambda : self.parent.remove_source_datasets_widget(self))
+        
+        url_lab = QLabel('URL of source dataset')
+        url_lab.setWordWrap(True)
+        self.url = QLineEdit(self)
+        if self.dic.get('URL') == None or self.dic.get('URL') == "":
+            self.url.setPlaceholderText("URL")
+        else:
+            self.url.setPlaceholderText(self.dic.get('URL'))
+            
+        doi_lab = QLabel('DOI of source dataset')
+        doi_lab.setWordWrap(True)
+        self.doi = QLineEdit(self)
+        if self.dic.get('DOI') == None or self.dic.get('DOI') == "":
+            self.doi.setPlaceholderText("DOI")
+        else:
+            self.doi.setPlaceholderText(self.dic.get('DOI'))
+            
+        version_lab = QLabel('Version of source dataset')
+        version_lab.setWordWrap(True)
+        self.version = QLineEdit(self)
+        if self.dic.get('Version') == None or self.dic.get('Version') == "":
+            self.version.setPlaceholderText("Version")
+        else:
+            self.version.setPlaceholderText(self.dic.get('Version'))
+            
+        layout = QVBoxLayout()
+        layout.addWidget(self.delete_button)
+        layout.addWidget(url_lab)
+        layout.addWidget(self.url)
+        layout.addWidget(doi_lab)
+        layout.addWidget(self.doi)
+        layout.addWidget(version_lab)
+        layout.addWidget(self.version)
+        
+        self.setLayout(layout)
+        
+        
+    def get_values(self):
+        return_dic = {}
+        
+        if self.url.text() != "":
+            return_dic['URL'] = self.url.text()
+        else:
+            return_dic['URL'] = self.dic.get('URL')
+            
+        if self.doi.text() != "":
+            return_dic['DOI'] = self.doi.text()
+        else:
+            return_dic['DOI'] = self.dic.get('DOI')
+            
+        if self.version.text() != "":
+            return_dic['Version'] = self.version.text()
+        else:
+            return_dic['Version'] = self.dic.get('Version')
+        
+        return return_dic
+        
+
+# =============================================================================
+# UpdateDatasetDescription Optinal Tab
+# =============================================================================
+class UpdateDatasetDescription_OptionalTab(QWidget):
+    """
+    """
+
+
+    def __init__(self, parent):
+        """
+
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+        # self.threads_pool = self.parent.threads_pool
+        self.dataset_description = self.parent.dataset_description
+        
+        authors_lab = QLabel("List of individuals (separated by ',') who contributed to the creation/curation of the dataset.")
+        authors_lab.setWordWrap(True)
+        self.authors = QLineEdit(self)
+        if self.dataset_description.get('Authors') == None or self.dataset_description.get('Authors') == '':
+            self.authors.setPlaceholderText("Authors")
+        else:
+            self.authors.setPlaceholderText(''.join(str(author)+',' for author in self.dataset_description.get('Authors'))[:-1])
+        
+        acknowledgements_lab = QLabel('Text acknowledging contributions of individuals or institutions beyond those listed in Authors or Funding.')
+        acknowledgements_lab.setWordWrap(True)
+        self.acknowledgements = QLineEdit(self)
+        if self.dataset_description.get('Acknowledgements') == None or self.dataset_description.get('Acknowledgements') == '':
+            self.acknowledgements.setPlaceholderText("Acknowledgements")
+        else:
+            self.acknowledgements.setPlaceholderText(self.dataset_description.get('Acknowledgements'))
+        
+        how_to_acknoledge_lab = QLabel('Text containing instructions on how researchers using this dataset should acknowledge the original authors. This field can also be used to define a publication that should be cited in publications that use the dataset.')
+        how_to_acknoledge_lab.setWordWrap(True)
+        self.how_to_acknoledge = QLineEdit(self)
+        if self.dataset_description.get('HowToAcknowledge') == None or self.dataset_description.get('HowToAcknowledge') == '':
+            self.how_to_acknoledge.setPlaceholderText("How to Acknowledge")
+        else:
+            self.how_to_acknoledge.setPlaceholderText(self.dataset_description.get('HowToAcknowledge'))
+        
+        funding_lab = QLabel("List of sources of funding (grant numbers) (separated by ',').")
+        funding_lab.setWordWrap(True)
+        self.funding = QLineEdit(self)
+        if self.dataset_description.get('Funding') == None or self.dataset_description.get('Funding') == '':
+            self.funding.setPlaceholderText("Funding")
+        else:
+            self.funding.setPlaceholderText(''.join(str(author)+',' for author in self.dataset_description.get('Funding'))[:-1])
+        
+        ethics_approvals_lab = QLabel("List of ethics committee approvals (separated by ',') of the research protocols and/or protocol identifiers.")
+        ethics_approvals_lab.setWordWrap(True)
+        self.ethics_approvals = QLineEdit(self)
+        if self.dataset_description.get('EthicsApprovals') == None or self.dataset_description.get('EthicsApprovals') == '':
+            self.ethics_approvals.setPlaceholderText("Ethics Approvals")
+        else:
+            self.ethics_approvals.setPlaceholderText(''.join(str(author)+',' for author in self.dataset_description.get('EthicsApprovals'))[:-1])
+        
+        references_and_links_lab = QLabel("List of references to publications (separated by ',') that contain information on the dataset. A reference may be textual or a URI.")
+        references_and_links_lab.setWordWrap(True)
+        self.references_and_links = QLineEdit(self)
+        if self.dataset_description.get('ReferencesAndLinks') == None or self.dataset_description.get('ReferencesAndLinks') == '':
+            self.references_and_links.setPlaceholderText("References and Links")
+        else:
+            self.references_and_links.setPlaceholderText(''.join(str(author)+',' for author in self.dataset_description.get('ReferencesAndLinks'))[:-1])
+        
+        dataset_doi_lab = QLabel('The Digital Object Identifier of the dataset (not the corresponding paper).')
+        dataset_doi_lab.setWordWrap(True)
+        self.dataset_doi = QLineEdit(self)
+        if self.dataset_description.get('DatasetDOI') == None or self.dataset_description.get('DatasetDOI') == '':
+            self.dataset_doi.setPlaceholderText("Dataset DOI")
+        else:
+            self.dataset_doi.setPlaceholderText(self.dataset_description.get('DatasetDOI'))
+        
+        vertical_spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)  
+        
+        layout = QVBoxLayout()
+        layout.addWidget(authors_lab)
+        layout.addWidget(self.authors)
+        layout.addWidget(acknowledgements_lab)
+        layout.addWidget(self.acknowledgements)
+        layout.addWidget(how_to_acknoledge_lab)
+        layout.addWidget(self.how_to_acknoledge)
+        layout.addWidget(funding_lab)
+        layout.addWidget(self.funding)
+        layout.addWidget(ethics_approvals_lab)
+        layout.addWidget(self.ethics_approvals)
+        layout.addWidget(references_and_links_lab)
+        layout.addWidget(self.references_and_links)
+        layout.addWidget(dataset_doi_lab)
+        layout.addWidget(self.dataset_doi)
+        layout.addItem(vertical_spacer)
+
+        self.setLayout(layout)
+        
+        
+    def get_values(self):
+        optional_dic = {}
+        if self.authors.text() != '':
+            optional_dic['Authors'] = self.authors.text().split(',')
+        else:
+            if self.dataset_description.get('Authors') != None:
+                optional_dic['Authors'] = self.dataset_description.get('Authors')
+        if self.acknowledgements.text() != '':
+            optional_dic['Acknowledgements'] = self.acknowledgements.text()
+        else:
+            if self.dataset_description.get('Acknowledgements') != None:
+                optional_dic['Acknowledgements'] = self.dataset_description.get('Acknowledgements')
+        if self.how_to_acknoledge.text() != '':
+            optional_dic['HowToAcknowledge'] = self.how_to_acknoledge.text()
+        else:
+            if self.dataset_description.get('HowToAcknowledge') != None:
+                optional_dic['HowToAcknowledge'] = self.dataset_description.get('HowToAcknowledge')
+        if self.funding.text() != '':
+            optional_dic['Funding'] = self.funding.text().split(',')
+        else:
+            if self.dataset_description.get('Funding') != None:
+                optional_dic['Funding'] = self.dataset_description.get('Funding')
+        if self.ethics_approvals.text() != '':
+            optional_dic['EthicsApprovals'] = self.ethics_approvals.text().split(',')
+        else:
+            if self.dataset_description.get('EthicsApprovals') != None:
+                optional_dic['EthicsApprovals'] = self.dataset_description.get('EthicsApprovals')
+        if self.references_and_links.text() != '':
+            optional_dic['ReferencesAndLinks'] = self.references_and_links.text().split(',')
+        else:
+            if self.dataset_description.get('ReferencesAndLinks') != None:
+                optional_dic['ReferencesAndLinks'] = self.dataset_description.get('ReferencesAndLinks')
+        if self.dataset_doi.text() != '':
+            optional_dic['DatasetDOI'] = self.dataset_doi.text()
+        else:
+            if self.dataset_description.get('DatasetDOI') != None:
+                optional_dic['DatasetDOI'] = self.dataset_description.get('DatasetDOI')
+            
+        return optional_dic
+        
+
+
+
+# # =============================================================================
+# # UpdateDatasetDescription
+# # =============================================================================
+# class UpdateDatasetDescription(QMainWindow):
+#     """
+#     """
+
+
+#     def __init__(self, parent):
+#         """
+
+
+#         Parameters
+#         ----------
+#         parent : TYPE
+#             DESCRIPTION.
+
+#         Returns
+#         -------
+#         None.
+
+#         """
+#         super().__init__()
+#         self.parent = parent
+#         self.bids = self.parent.bids
+#         # self.threads_pool = self.parent.threads_pool
+
+#         self.setWindowTitle("Update Authors")
+#         self.window = QWidget(self)
+#         self.setCentralWidget(self.window)
+#         self.center()
+        
+#         self.name = QLineEdit(self)
+#         self.name.setPlaceholderText("Name of the dataset")
+        
+#         self.BIDSVersion = QLineEdit(self)
+#         self.BIDSVersion.setPlaceholderText("1.2.2")
+        
+#         self.HEDVersion = QLineEdit(self)
+#         self.HEDVersion.setPlaceholderText("HEDVersion")
+        
+#         self.dataset_type = QInputDialog.getItem(self, "", "Dataset Type", ['raw', 'derivatives'])
+        
+#         self.license  = QLineEdit(self)
+#         self.license.placeholderText('License')
+        
+#         self.authors = QLineEdit(self)
+#         self.authors.setPlaceholderText("Authors")
+        
+#         self.acknowledgements = QLineEdit(self)
+#         self.acknowledgements.setPlaceholderText("Acknowledgements")
+        
+#         self.how_to_acknoledge = QLineEdit(self)
+#         self.how_to_acknoledge.setPlaceholderText("How to Acknowledge")
+        
+#         self.funding = QLineEdit(self)
+#         self.funding.setPlaceholderText("Funding")
+        
+#         self.ethics_approvals = QLineEdit(self)
+#         self.ethics_approvals.setPlaceholderText("Ethics Approvals")
+        
+#         self.references_and_links = QLineEdit(self)
+#         self.references_and_links.setPlaceholderText("References and Links")
+        
+#         self.dataset_doi = QLineEdit(self)
+#         self.dataset_doi.setPlaceholderText("Dataset DOI")
+        
+#         self.generated_by = QLineEdit(self)
+#         self.generated_by.setPlaceholderText("Generated By")
+        
+#         self.source_datasets = QLineEdit(self)
+#         self.source_datasets.setPlaceholderText("Source Dataset")
+        
+#         self.update_dataset_description_button = QPushButton("Update Dataset Description")
+#         self.update_dataset_description_button.clicked.connect(self.update_dataset_description)
+
+#         layout = QVBoxLayout()
+#         layout.addWidget(self.authors)
+#         layout.addWidget(self.update_authors_button)
+
+#         self.window.setLayout(layout)
+
+
+#     def update_authors(self):
+#         """
+
+
+#         Returns
+#         -------
+#         None.
+
+#         """
+#         authors = self.authors.text()
+#         if ',' in authors:
+#             authors_list = authors.split(',')
+#         else:
+#             authors_list = [authors]
+#         self.parent.setEnabled(False)
+#         self.thread = QThread()
+#         self.operation = OperationWorker(self.bids.update_authors_to_dataset_description, args=[self.bids.root_dir], kwargs={'authors':authors_list})
+#         logging.debug('OperationWorker instanciated')
+#         self.operation.moveToThread(self.thread)
+#         logging.debug('OperationWorker moved to thread')
+#         self.thread.started.connect(self.operation.run)
+#         logging.debug('Thread started and launching operation.run')
+#         self.operation.finished.connect(self.thread.quit)
+#         self.operation.finished.connect(self.operation.deleteLater)
+#         self.thread.finished.connect(self.thread.deleteLater)
+#         self.thread.start()
+#         self.thread.finished.connect(
+#             lambda: self.parent.setEnabled(True)
+#         )
+#         self.thread.finished.connect(lambda: self.end_update())
+#         logging.info(f"Updating {authors} as BIDS directory authors")
+#         self.parent.bids_metadata.update_metadata()
+
+#         self.hide()
+
+
+#     def end_update(self):
+#         """
+
+
+#         Returns
+#         -------
+#         None.
+
+#         """
+#         logging.info('Thread ended')
+#         self.parent.bids_metadata.update_metadata()
+
+
+#     def center(self):
+#         """
+
+
+#         Returns
+#         -------
+#         None.
+
+#         """
+#         qr = self.frameGeometry()
+#         cp = QDesktopWidget().availableGeometry().center()
+#         qr.moveCenter(cp)
+#         self.move(qr.topLeft())
 
 
 # =============================================================================
@@ -2498,11 +4069,9 @@ class ParticipantsTSV_AddItem(QMainWindow):
         self.parent.setEnabled(False)
         self.thread = QThread()
         self.operation = OperationWorker(self.bids.update_participants_json, args=[new_item])
-        logging.debug('OperationWorker instanciated')
         self.operation.moveToThread(self.thread)
-        logging.debug('OperationWorker moved to thread')
         self.thread.started.connect(self.operation.run)
-        logging.debug('Thread started and launching operation.run')
+        self.operation.in_progress.connect(self.is_in_progress)
         self.operation.finished.connect(self.thread.quit)
         self.operation.finished.connect(self.operation.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
@@ -2515,6 +4084,10 @@ class ParticipantsTSV_AddItem(QMainWindow):
         # self.parent.bids_metadata.update_metadata()
 
         self.hide()
+        
+        
+    def is_in_progress(self, in_progress):
+        self.parent.parent.work_in_progress.update_work_in_progress(in_progress)
 
 
     def center(self):
@@ -2817,7 +4390,7 @@ class SubprocessWorker(QObject):
     """
     """
     finished = pyqtSignal()
-    progress = pyqtSignal(int)
+    in_progress = pyqtSignal(tuple)
 
 
     def __init__(self, operation):
@@ -2846,7 +4419,171 @@ class SubprocessWorker(QObject):
         None.
 
         """
+        operation = self.operation.split(' ')[0]
+        self.in_progress.emit((operation, True))
         subprocess.Popen(self.operation, shell=True).wait()
+        self.in_progress.emit((operation, False))
+        self.finished.emit()
+        
+        
+        
+# =============================================================================
+# AddPipelineWorker
+# =============================================================================
+class AddPipelineWorker(QObject):
+    """
+    """
+    finished = pyqtSignal()
+    in_progress = pyqtSignal(tuple)
+
+
+    def __init__(self, repo):
+        """
+
+
+        Parameters
+        ----------
+        operation : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.repo = repo
+
+    def run(self):
+        """
+
+
+        Returns
+        -------
+        None.
+
+        """
+        print('Add Pipeline Worker: Run')
+        self.in_progress.emit((f'Add {self.repo.get("Name")}', True))
+        
+        git_url = f'https://github.com/BMAT-Apps/{self.repo.get("Name")}.git'
+        
+        pipeline_path = f'Pipelines/{self.repo.get("Name")}'
+        
+        self.in_progress.emit(('Clone repo', True))
+        
+        subprocess.Popen(f'git clone {git_url} {pipeline_path}', shell=True).wait()
+        
+        self.in_progress.emit(('Clone repo', False))
+        
+        self.in_progress.emit(('python requirements', True))
+        
+        with open(f'{pipeline_path}/setup.json') as json_file:
+            setup = json.load(json_file)
+        
+        if setup.get('python_requirements') != None and setup.get('python_requirements') != "":
+            requirements_path = f'{pipeline_path}/{setup.get("python_requirements")}'
+            subprocess.Popen(f'pip install -r {requirements_path}', shell=True).wait()
+        
+        self.in_progress.emit(('python requirements', False))
+        
+        self.in_progress.emit(('docker', True))
+        
+        if setup.get('docker') != None and setup.get('docker') != "":
+            docker = setup.get('docker')
+            if docker.get('docker') != None and setup.get('docker') != "":
+                docker_name = docker.get('docker')
+                if docker_name == 'DockerFile':
+                    dockerfile_path = f'{pipeline_path}/Dockerfile'
+                    subprocess.Popen(f'docker build -t {docker.get("tag")} -f {dockerfile_path} .', shell=True).wait()
+                else:
+                    subprocess.Popen(f'docker pull {docker_name}', shell=True).wait()
+                    if docker.get('tag') != None and docker.get('tag') != "":
+                        subprocess.Popen(f'docker tag {docker_name} {docker.get("tag")}', shell=True).wait()
+        
+        self.in_progress.emit(('docker', False))
+        
+        self.in_progress.emit((f'Add {self.repo.get("Name")}', False))
+        self.finished.emit()
+        
+        
+        
+# =============================================================================
+# UpdatePipelineWorker
+# =============================================================================
+class UpdatePipelineWorker(QObject):
+    """
+    """
+    finished = pyqtSignal()
+    in_progress = pyqtSignal(tuple)
+
+
+    def __init__(self, repo):
+        """
+
+
+        Parameters
+        ----------
+        operation : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.repo = repo
+
+    def run(self):
+        """
+
+
+        Returns
+        -------
+        None.
+
+        """
+        self.in_progress.emit((f'Update {self.repo.get("Name")}', True))
+        
+        # git_url = f'https://github.com/BMAT-Apps/{self.repo.get("Name")}.git'
+        
+        self.in_progress.emit(('Pull repo', True))
+        
+        pipeline_path = f'Piepelines/{self.repo.get("Name")}'
+        
+        subprocess.Popen(f'git -C {pipeline_path} pull', shell=True).wait()
+        
+        self.in_progress.emit(('Pull repo', False))
+        
+        self.in_progress.emit(('update python requirements', True))
+        
+        with open(f'Pipelines/{self.repo.get("Name")}/setup.json') as json_file:
+            setup = json.load(json_file)
+        
+        if setup.get('python_requirements') != None and setup.get('python_requirements') != "":
+            requirements_path = f'Pipelines/{self.repo.get("Name")}/{setup.get("python_requirements")}'
+            subprocess.Popen(f'pip install -r {requirements_path}', shell=True).wait()
+        
+        self.in_progress.emit(('update python requirements', False))
+        
+        self.in_progress.emit(('update docker', True))
+        
+        if setup.get('docker') != None and setup.get('docker') != "":
+            docker = setup.get('docker')
+            if docker.get('docker') != None and setup.get('docker') != "":
+                docker_name = docker.get('docker')
+                if docker_name == 'DockerFile':
+                    dockerfile_path = f'Pipelines/{self.repi.get("Name")}Dockerfile'
+                    subprocess.Popen(f'docker build -t {docker.get("tag")} -f {dockerfile_path} .', shell=True).wait()
+                else:
+                    subprocess.Popen(f'docker pull {docker_name}', shell=True).wait()
+                    if docker.get('tag') != None and docker.get('tag') != "":
+                        subprocess.Popen(f'docker tag {docker_name} {docker.get("tag")}', shell=True).wait()
+        
+        self.in_progress.emit(('update docker', False))
+        
+        self.in_progress.emit((f'Update {self.repo.get("Name")}', False))
         self.finished.emit()
 
 
@@ -2858,7 +4595,7 @@ class OperationWorker(QObject):
     """
     """
     finished = pyqtSignal()
-    progress = pyqtSignal(int)
+    in_progress = pyqtSignal(tuple)
 
 
     def __init__(self, function, args=[], kwargs={}):
@@ -2894,10 +4631,12 @@ class OperationWorker(QObject):
         None.
 
         """
+        self.in_progress.emit((self.function.__name__, True))
         try:
             self.function(*self.args, **self.kwargs)
         except Exception as e:
             pass
+        self.in_progress.emit((self.function.__name__, False))
         self.finished.emit()
 
 
@@ -2909,8 +4648,7 @@ class AddWorker(QObject):
     """
     """
     finished = pyqtSignal()
-    progress = pyqtSignal(int)
-
+    in_progress = pyqtSignal(tuple)
 
     def __init__(self, bids, list_to_add):
         """
@@ -2942,6 +4680,8 @@ class AddWorker(QObject):
         None.
 
         """
+        self.in_progress.emit(('Add', True))
+        
         for item in self.list_to_add:
 
             dicom = item[0]
@@ -2964,6 +4704,8 @@ class AddWorker(QObject):
 
             except Exception as e:
                 pass
+            
+        self.in_progress.emit(('Add',False))    
         self.finished.emit()
 
 
@@ -3071,6 +4813,90 @@ class StdTQDMTextEdit(QLineEdit):
         else:
             # we suppose that all TQDM prints have \r, so drop the rest
             pass
+
+
+
+class CollapsibleBox(QWidget):
+    def __init__(self, title="", parent=None):
+        super(CollapsibleBox, self).__init__(parent)
+
+        self.toggle_button = QToolButton(
+            text=title, checkable=True, checked=False
+        )
+        self.toggle_button.setStyleSheet("QToolButton { border: none; }")
+        self.toggle_button.setToolButtonStyle(
+            Qt.ToolButtonTextBesideIcon
+        )
+        self.toggle_button.setArrowType(Qt.RightArrow)
+        self.toggle_button.pressed.connect(self.on_pressed)
+
+        self.toggle_animation = QParallelAnimationGroup(self)
+
+        self.content_area = QScrollArea(
+            maximumHeight=0, minimumHeight=0
+        )
+        self.content_area.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Expanding
+        )
+        self.content_area.setFrameShape(QFrame.NoFrame)
+        self.content_area.setBackgroundRole(QPalette.Background)
+
+        lay = QVBoxLayout(self)
+        lay.setSpacing(0)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(self.toggle_button)
+        lay.addWidget(self.content_area)
+
+        self.toggle_animation.addAnimation(
+            QPropertyAnimation(self, b"minimumHeight")
+        )
+        self.toggle_animation.addAnimation(
+            QPropertyAnimation(self, b"maximumHeight")
+        )
+        self.toggle_animation.addAnimation(
+            QPropertyAnimation(self.content_area, b"maximumHeight")
+        )
+
+    @pyqtSlot()
+    def on_pressed(self):
+        checked = self.toggle_button.isChecked()
+        self.toggle_button.setArrowType(
+            Qt.DownArrow if not checked else Qt.RightArrow
+        )
+        self.toggle_animation.setDirection(
+            QAbstractAnimation.Forward
+            if not checked
+            else QAbstractAnimation.Backward
+        )
+        if checked:
+            self.toggle_button.setChecked(False)
+        else:
+            self.toggle_button.setChecked(True)
+        self.toggle_animation.start()
+
+    def setContentLayout(self, layout):
+        lay = self.content_area.layout()
+        del lay
+        self.content_area.setLayout(layout)
+        collapsed_height = (
+            self.sizeHint().height() - self.content_area.maximumHeight()
+        )
+        content_height = layout.sizeHint().height()
+        for i in range(self.toggle_animation.animationCount()):
+            animation = self.toggle_animation.animationAt(i)
+            animation.setDuration(500)
+            animation.setStartValue(collapsed_height)
+            animation.setEndValue(collapsed_height + content_height)
+
+        content_animation = self.toggle_animation.animationAt(
+            self.toggle_animation.animationCount() - 1
+        )
+        content_animation.setDuration(500)
+        content_animation.setStartValue(0)
+        content_animation.setEndValue(content_height)
+
+
+
 
 
 def launch_BMAT():

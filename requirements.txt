@@ -19,3 +19,7 @@ numpy
 bids_validator
 zipp
 scipy
+bs4
+markdown
+requests
+html5lib

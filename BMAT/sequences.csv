@@ -34,4 +34,4 @@ FLAIR,FLAIR,,,Gad,gad,,,,,,,,,anat
 Opt_DTI+Eq_1,sbref,,,,,,,,,,,,,dwi
 Opt_DTI,dwi,_,multishell,,,_4_,4,,,,,,,dwi
 Opt_DTI,dwi,_,multishell,,,_5_,5,,,,,,,dwi
-dDWI,sbref,,,,,,,,,,,,,dwi
+DWI,sbref,,,,,,,,,,,,,dwi

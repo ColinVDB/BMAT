@@ -1,7 +1,0 @@
-{
-	"name": "SAMSEG",
-	"source_code": "samseg.py",
-	"import_name": "samseg",
-	"attr": "samseg", 
-	"add_info":{}
-}

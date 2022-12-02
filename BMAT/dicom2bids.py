@@ -20,7 +20,6 @@ from pydicom import dcmread
 import logging
 import sys
 # from nipype.interfaces.dcm2nii import Dcm2niix
-import docker
 
 from tqdm.auto import tqdm
 # from my_logging import setup_logging
@@ -66,7 +65,6 @@ class BIDSHandler:
         # self.dcm2niix_converter.inputs.out_filename = "\"%d_%p_%t_%s\""
         # self.dcm2niix_converter.inputs.compress = 'y'
         # self.dicom2niix_path = 'dcm2niix'
-        self.client = docker.from_env()
 
         all_directories = [x for x in next(os.walk(root_dir))[1]]
         all_subj_dir = []
@@ -291,7 +289,7 @@ class BIDSHandler:
                 # subprocess.Popen(f'docker run --rm -v "{path}":/media -v "{directory}":/mnt xnat/dcm2niix dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /mnt /media', shell=True).wait()
                 # self.client.containers.run('xnat/dcm2niix', auto_remove=True, volumes={f'{path}':{'bind':'/media', 'mode':'ro'}, f'{directory}':{'bind':'/mnt', 'mode':'rw'}}, command=['dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /mnt /media'])
                 # subprocess.Popen(f'dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o {directory} {path}', shell=True).wait()
-                subprocess.Popen(f'docker run --rm --privileged -v "{directory}":/home -v "{path}":/media colinvdb/bmat-ext:0.0.1 /bin/bash -c "source /root/.bashrc && dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /home /media"', shell=True).wait()
+                subprocess.Popen(f'docker run --rm --privileged -v "{directory}":/home -v "{path}":/media colinvdb/bmat-dcm2niix dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /home /media', shell=True).wait()
                 
         for _,_,files in os.walk(directory):
             for file in files:
@@ -378,9 +376,6 @@ class BIDSHandler:
             dataset_description = { 
             	"Name": "dataset", 
             	"BIDSVersion":  "1.2.2", 
-            	"PipelineDescription": {
-            		"Name": "dataset"
-            	}
             }
             with open(pjoin(bids_dir, 'dataset_description.json'), 'w') as fp:
                 json.dump(dataset_description, fp)
@@ -394,7 +389,6 @@ class BIDSHandler:
                 for d in os.listdir(subdir):
                     if os.path.isdir(pjoin(subdir,d)):
                         dataset_description["Name"] = d
-                        dataset_description["PipelineDescription"]["Name"] = d
                         with open(pjoin(subdir, d, 'dataset_description.json'), 'w') as fp:
                             json.dump(dataset_description, fp)
                             
@@ -531,7 +525,7 @@ class BIDSHandler:
             shcopy("readme_example", 
                    pjoin(bids_dir, "README"))
         
-        print("WTF-return make_directories_from")
+        # print("WTF-return make_directories_from")
         return pat_id, session
     
 
@@ -722,14 +716,25 @@ class BIDSHandler:
                 if pexists(pjoin(path, f"{filename}{file_extension}")):
                     if pexists(pjoin(dest_dir, f"{new_filename}{file_extension}")):
                         logging.info(f'File already existing in dest dir {pjoin(dest_dir, f"{new_filename}{file_extension}")}')
-                        ext = 'a'
-                        for i in range(26):
-                            if not pexists(pjoin(dest_dir, f"{new_filename}_{ext}{file_extension}")):
-                                shutil.move(pjoin(path, f"{filename}{file_extension}"),
-                                        pjoin(dest_dir, f"{new_filename}_{ext}{file_extension}"))
-                                break
+                        new_filename_ext = new_filename
+                        while pexists(pjoin(dest_dir, f"{new_filename_ext}{file_extension}")):
+                            new_filename_details = new_filename_ext.split('_')
+                            if all(['run-' not in e for e in new_filename_details]):
+                                new_filename_details.insert(len(new_filename_details)-1, 'run-2')
+                                new_filename_ext = ''.join(e+'_' for e in new_filename_details)[:-1]
                             else:
-                                ext = chr(ord(ext)+1)
+                                run_index = ['run-' in e for e in new_filename_details].index(True)
+                                run_value = new_filename_details[run_index]
+                                run_ext = run_value.split('-')[1]
+                                new_run_ext = f'run-{int(run_ext)+1}'
+                                new_filename_details.remove(run_value)
+                                new_filename_details.insert(run_index, new_run_ext)
+                                new_filename_ext = ''.join(e+'_' for e in new_filename_details)[:-1]
+                            if not pexists(pjoin(dest_dir, f"{new_filename_ext}{file_extension}")):
+                                shutil.move(pjoin(path, f"{filename}{file_extension}"),
+                                        pjoin(dest_dir, f"{new_filename_ext}{file_extension}"))
+                                break
+                        
                     else:
                         shutil.move(pjoin(path, f"{filename}{file_extension}"),
                             pjoin(dest_dir, f"{new_filename}{file_extension}"))
@@ -1169,6 +1174,13 @@ class BIDSHandler:
         logging.info('done.')
 
         return pat_name, pat_date
+    
+    
+    
+    def update_dataset_description(self, dataset_description={}):
+        with open(pjoin(self.root_dir, 'dataset_description.json'), 'w') as fp:
+            json.dump(dataset_description, fp)
+    
     
 
     def update_participants_json(self, new_item):
