@@ -7,9 +7,9 @@ pandas
 pydicom
 docker
 tqdm
-PyQt5
+PyQt5==5.12
 PyQt5-sip
-PyQtWebEngine
+PyQtWebEngine==5.12
 PySocks
 QtAwesome
 QtPy
