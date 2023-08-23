@@ -142,11 +142,11 @@ class MainWindow(QMainWindow):
         for root, dirs, _ in os.walk('Pipelines'):
             for d in dirs:
                 if d == 'src':
-                    for r, ds, files in os.walk(pjoin(root,d)):
-                        for file in files:
+                    for file in os.listdir(pjoin(root,d)):
+                        if os.path.isfile(pjoin(root, d, file)):
                             if '.json' in file:
-                                import_r = r.replace(os.sep,'.')
-                                f = open(pjoin(r,file))
+                                import_r = pjoin(root, d).replace(os.sep,'.')
+                                f = open(pjoin(root, d, file))
                                 jsn = json.load(f)
                                 self.pipelines_name.append(jsn.get('name'))
                                 import_name = jsn.get('import_name')
