@@ -138,6 +138,7 @@ class MainWindow(QMainWindow):
 
         self.pipelines = {}
         self.pipelines_name = []
+        self.bmat_path = __file__.replace('BMAT.py', '')
 
         for root, dirs, _ in os.walk('Pipelines'):
             for d in dirs:
@@ -158,18 +159,20 @@ class MainWindow(QMainWindow):
         self.local_pipelines = {}
         self.local_pipelines_name = []
 
-        if os.path.isdir('LocalPipelines'):
-            for root, dirs, files in os.walk('LocalPipelines'):
-                for file in files:
-                    if '.json' in file:
-                        f = open(pjoin(root,file))
-                        jsn = json.load(f)
-                        self.local_pipelines_name.append(jsn.get('name'))
-                        import_name = jsn.get('import_name')
-                        attr = jsn.get('attr')
-                        self.local_pipelines[jsn.get('name')] = jsn
-                        self.local_pipelines[jsn.get('name')]['import'] = __import__(f'LocalPipelines.{import_name}', globals(), locals(), [attr], 0)
-                        f.close()
+        if os.path.isdir(pjoin(self.bmat_path, 'LocalPipelines')):
+            for dirs in os.listdir(pjoin(self.bmat_path, 'LocalPipelines')):
+                if os.path.isdir(pjoin(self.bmat_path, 'LocalPipelines', dirs)):
+                    for file in os.listdir(pjoin(self.bmat_path, 'LocalPipelines', dirs)):
+                        if '.json' in file:
+                            import_r = pjoin(self.bmat_path, 'LocalPipelines', dirs).replace(os.sep,'.')
+                            f = open(pjoin(self.bmat_path, 'LocalPipelines', dirs, file))
+                            jsn = json.load(f)
+                            self.local_pipelines_name.append(jsn.get('name'))
+                            import_name = jsn.get('import_name')
+                            attr = jsn.get('attr')
+                            self.local_pipelines[jsn.get('name')] = jsn
+                            self.local_pipelines[jsn.get('name')]['import'] = __import__(f'{import_r}.{import_name}', globals(), locals(), [attr], 0)
+                            f.close()
 
         # Create menu bar and add action
         self.menu_bar = self.menuBar()
