@@ -14,7 +14,8 @@ MPRAGE,T1w,_,MPRAGE,Gad,gad,,,,,,,,,anat
 Black_Blood,T1w,_,3d,Gd,gad,,,,,,,,,anat
 3D_AX_T1,T1w,_,3d,Gad,gad,,,,,,,,,anat
 3D_EPI,T2starw,,,Gad,gad,,,,,SWIphase,phase,,,anat
-3D_EPI,T2starw,,,Gad,gad,,,,,_,mag,,,anat
+3D_EPI,T2starw,,,Gad,gad,,,,,SWI,swi,,,anat
+3D_EPI,T2starw,,,Gad,gad,,,,,_,EPI,,,anat
 3DT2,T2starw,,,,,,,,,_ph,phase,,,anat
 3DT2,T2starw,,,,,,,,,_,mag,,,anat
 SWI_NEW,T2starw,,,,,,,,,_ph,phase,,,anat
