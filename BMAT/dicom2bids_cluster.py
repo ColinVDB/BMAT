@@ -249,7 +249,7 @@ class BIDSHandler:
 
         """
         if not pexists(dirpath):
-            os.mkdir(dirpath)
+            os.makedirs(dirpath)
             
 
     def convert_all_dicoms(self, directory, convert=True, logger=logging):
