@@ -1,5 +1,9 @@
 # BIDS Managing and Analysis Tool
 
+## Cluster Version
+
+This branch is a version of BMAT compatible with the UCLouvain SSS cluster in order to launch the jobs on the sever HPC using ssh connection and a slurm scheduler.
+
 ## Description
 
 The BMAT software is a complete and easy-to-use local open-source neuroimaging analysis tool with a graphical user interface (GUI) that uses the BIDS format to organize and process brain MRI data for MS imaging research studies. BMAT provides the possibility to translate data from MRI scanners to the BIDS structure, create and manage BIDS datasets as well as develop and run automated processing pipelines. 
