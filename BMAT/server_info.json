@@ -1,0 +1,4 @@
+{
+	"server":{"host":"cc-login.icp.ucl.ac.be", "user":"vdbulckeco", "key":"/home/colin/.ssh/id_rsa.ceci"}, 
+	"shared_folders":{"/mnt/cemo-pm":"/storage/research/ions/cemo-pm", "/mnt/nima":"/storage/platform/ions/nima"}
+}

@@ -1,0 +1,17 @@
+{
+	"python_script":"/storage/research/ions/cemo-pm/shared/BMAT/dcm2bids_job.py",
+	"venv":"/storage/research/ions/cemo-pm/shared/BMAT/.venv/bmat-dcm2bids/bin/activate",
+	"log":"/storage/research/ions/cemo-pm/shared/BMAT/logs",
+	"modules":["dcm2niix", "Python/3.10"],
+	"slurm_infos":{
+		"job-name":"dcm2bids",
+		"nodes":"1",
+		"ntasks":"1",
+		"cpus-per-task":"1",
+		"mem-per-cpu":"8192",
+		"time":"00:30:00",
+		"mail-type":"FAIL",
+		"mail-user":"colin.vandenbulcke@uclouvain.be"
+	},
+	"args":{"--unzip":"", "--sequences":"/storage/research/ions/cemo-pm/shared/BMAT/sequences.csv"}
+}
