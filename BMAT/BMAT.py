@@ -69,14 +69,16 @@ from PyQt5.QtWidgets import (QDesktopWidget,
                              QSizePolicy,
                              QFrame, 
                              QGroupBox, 
-                             QSpacerItem)
+                             QSpacerItem, 
+                             QCheckBox)
 from PyQt5.QtGui import (QFont,
                          QIcon,
                          QTextCursor,
                          QPixmap,
                          QColor, 
                          QMovie, 
-                         QPalette)
+                         QPalette,
+                         QCloseEvent)
 from PyQt5.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PyQt5.QtWebChannel import QWebChannel
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
@@ -99,6 +101,7 @@ import zipfile
 import requests
 from bs4 import BeautifulSoup
 import markdown
+from submit_job_sss import submit_job
 
 # from config import config_dict, STDOUT_WRITE_STREAM_CONFIG, TQDM_WRITE_STREAM_CONFIG, STREAM_CONFIG_KEY_QUEUE, \
 #     STREAM_CONFIG_KEY_QT_QUEUE_RECEIVER
@@ -265,10 +268,15 @@ class MainWindow(QMainWindow):
         self.window.closeEvent = self.closeEvent
 
         self.center()
-
-        self.bids_dir = str(QFileDialog.getExistingDirectory(self, "Select BIDS Directory"))
+        
+        self.bids_dir = str(QFileDialog.getExistingDirectory(self, "Select BIDS Directory", options=QFileDialog.DontUseNativeDialog))
         while self.bids_dir=="":
-            self.bids_dir = str(QFileDialog.getExistingDirectory(self, "Please, select BIDS Directory"))
+            self.bids_dir = str(QFileDialog.getExistingDirectory(self, "Please, select BIDS Directory", options=QFileDialog.DontUseNativeDialog))
+        # if self.bids_dir == None or self.bids_dir == "":
+        #     print('bruh')
+            
+            
+        # else:
 
         self.dcm2niix_path = 'dcm2niix'
 
@@ -519,7 +527,7 @@ class MainWindow(QMainWindow):
     def create_bids_directory(self):
         logging.info("update_bids!")
 
-        bids_dir = str(QFileDialog.getExistingDirectory(self, "Create new BIDS Directory"))
+        bids_dir = str(QFileDialog.getExistingDirectory(self, "Create new BIDS Directory"), options=QFileDialog.DontUseNativeDialog)
         if os.path.isdir(bids_dir):
             self.bids_dir = bids_dir
             self.bids = BIDSHandler(root_dir=self.bids_dir)
@@ -563,7 +571,7 @@ class MainWindow(QMainWindow):
         """
         logging.info("update_bids!")
 
-        bids_dir = str(QFileDialog.getExistingDirectory(self, "Select BIDS Directory"))
+        bids_dir = str(QFileDialog.getExistingDirectory(self, "Select BIDS Directory"), options=QFileDialog.DontUseNativeDialog)
         if os.path.isdir(bids_dir):
             self.bids_dir = bids_dir
             self.bids = BIDSHandler(root_dir=self.bids_dir)
@@ -1597,7 +1605,7 @@ class BidsDirView(QWidget):
         elif any(['.nii' in item_path, '.nii.gz' in item_path]):
             self.itksnap = self.parent.memory.get('itksnap')
             if self.itksnap == None:
-                self.itksnap = QFileDialog.getOpenFileName(self, "Select the path to itksnap")[0]
+                self.itksnap = QFileDialog.getOpenFileName(self, "Select the path to itksnap", options=QFileDialog.DontUseNativeDialog)[0]
                 if self.itksnap != None and self.itksnap != '':
                     self.threads.append(QThread())
                     self.operation = SubprocessWorker(f'"{self.itksnap}" -g {item_path}')
@@ -1670,7 +1678,7 @@ class BidsDirView(QWidget):
 
         if action == openWith:
             logging.debug('Open With')
-            self.itksnap = QFileDialog.getOpenFileName(self, "Select the path to itksnap")[0]
+            self.itksnap = QFileDialog.getOpenFileName(self, "Select the path to itksnap", options=QFileDialog.DontUseNativeDialog)[0]
             if self.itksnap != None and self.itksnap != '':
                 self.threads.append(QThread())
                 self.operation = SubprocessWorker(f'"{self.itksnap}" -g {item_path}')
@@ -1885,17 +1893,60 @@ class BidsActions(QWidget):
         None.
 
         """
-        logging.info("add")
-        if hasattr(self, 'add_win'):
-            del self.add_win
-        self.add_win = AddWindow(self)
-        if not self.parent.dcm2niix_path:
-            # ajouter une fenetre
-            path = QFileDialog.getOpenFileName(self, "Select 'dcm2niix.exe' path")[0]
-            self.parent.dcm2niix_path = path
-            # self.parent.memory['dcm2niix_path'] = path
-            self.bids.setDicom2niixPath(self.parent.dcm2niix_path)
-        self.add_win.show()
+        class ActionDialog(QDialog):
+            def __init__(self, parent=None):
+                super().__init__(parent)
+                self.parent = parent
+                self.bids = self.parent.bids
+                self.initUI()
+                
+            def initUI(self):
+                self.setWindowTitle('Choose Action')
+                label = QLabel('Do you want to perform the conversion locally or the SSS server?', self)
+                
+                local_button = QPushButton('Locally', self)
+                local_button.clicked.connect(self.performLocally)
+                
+                remote_button = QPushButton('SSS Server', self)
+                remote_button.clicked.connect(self.performOnRemote)
+                
+                layout = QVBoxLayout()
+                layout.addWidget(label)
+                layout_button = QHBoxLayout()
+                layout_button.addWidget(local_button)
+                layout_button.addWidget(remote_button)
+                layout.addLayout(layout_button)
+                
+                self.setLayout(layout)
+                
+            def performLocally(self):
+                print('Performing action locally...')
+                
+                logging.info("add")
+                if hasattr(self, 'add_win'):
+                    del self.add_win
+                self.add_win = AddWindow(self)
+                if not self.parent.dcm2niix_path:
+                    # ajouter une fenetre
+                    path = QFileDialog.getOpenFileName(self, "Select 'dcm2niix.exe' path", options=QFileDialog.DontUseNativeDialog)[0]
+                    self.parent.dcm2niix_path = path
+                    # self.parent.memory['dcm2niix_path'] = path
+                    self.bids.setDicom2niixPath(self.parent.dcm2niix_path)
+                self.add_win.show()
+                self.hide()
+                
+            def performOnRemote(self):
+                print('Performing action on remote server...')
+                
+                logging.info("add")
+                if hasattr(self, 'add_win_server'):
+                    del self.add_win_server
+                self.add_win_server = AddServerWindow(self)
+                self.add_win_server.show()
+                self.hide()
+                
+        dialog = ActionDialog(self.parent)
+        dialog.exec_()
 
 
     def remove(self):
@@ -2259,7 +2310,7 @@ class AddWindow(QMainWindow):
         None.
 
         """
-        dicom_folder = str(QFileDialog.getExistingDirectory(self, "Select DICOM folder"))
+        dicom_folder = str(QFileDialog.getExistingDirectory(self, "Select DICOM folder", options=QFileDialog.DontUseNativeDialog))
         rowPosition = len(self.list_to_add)
         self.list_view.insertRow(rowPosition)
         self.list_view.setItem(rowPosition , 0, QTableWidgetItem(dicom_folder))
@@ -2276,7 +2327,7 @@ class AddWindow(QMainWindow):
         None.
 
         """
-        dicom_folder = QFileDialog.getOpenFileName(self, 'Select DICOM zip file')[0]
+        dicom_folder = QFileDialog.getOpenFileName(self, 'Select DICOM zip file', options=QFileDialog.DontUseNativeDialog)[0]
         rowPosition = len(self.list_to_add)
         self.list_view.insertRow(rowPosition)
         self.list_view.setItem(rowPosition , 0, QTableWidgetItem(dicom_folder))
@@ -2314,6 +2365,247 @@ class AddWindow(QMainWindow):
     
     def is_in_progress(self, in_progress):
         self.parent.parent.work_in_progress.update_work_in_progress(in_progress)
+    
+
+    def end_add(self):
+        """
+
+
+        Returns
+        -------
+        None.
+
+        """
+        self.parent.parent.bids_metadata.update_metadata()
+        logging.info(f'All done.')
+        self.parent.setEnabled(True)
+
+
+    def center(self):
+        """
+
+
+        Returns
+        -------
+        None.
+
+        """
+        qr = self.frameGeometry()
+        cp = QDesktopWidget().availableGeometry().center()
+        qr.moveCenter(cp)
+        self.move(qr.topLeft())
+        
+        
+        
+# =============================================================================
+# AddWindow
+# =============================================================================
+class AddServerWindow(QMainWindow):
+    """
+    """
+
+
+    def __init__(self, parent):
+        """
+
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+        # self.threads_pool = self.parent.threads_pool
+        
+        # get job_info
+        path = os.path.dirname(os.path.abspath(__file__))
+        if not pexists(pjoin(path, 'dcm2bids_sss.json')):
+            print('[ERROR] dcm2bids_sss.json file not found')
+            
+        self.job_json = None
+        with open(pjoin(path, 'dcm2bids_sss.json'), 'r') as f:
+            self.job_json = json.load(f)
+
+        self.setWindowTitle("Add MRI session on SSS cluster")
+        self.window = QWidget(self)
+        self.setCentralWidget(self.window)
+        self.center()
+
+        self.list_to_add = []
+
+        self.label = QLabel("Select DICOM zip file to add to BIDS directory")
+        self.label.setAlignment(Qt.AlignHCenter)
+
+        # self.add_folder_button = QPushButton("Add DICOM Folder")
+        # self.add_folder_button.clicked.connect(self.add_folder)
+        self.checkbox = QCheckBox('ISO format', self)
+        self.checkbox.stateChanged.connect(self.on_state_changed)
+        self.iso = False
+        self.add_files_button = QPushButton("Add DICOM zip Files")
+        self.add_files_button.clicked.connect(self.add_files)
+        self.list_view = QTableWidget()
+        self.list_view.setMinimumSize(800,200)
+        self.list_view.setColumnCount(3)
+        self.list_view.setColumnWidth(0, 600)
+        self.list_view.setColumnWidth(1, 100)
+        self.list_view.setColumnWidth(2, 100)
+        self.list_view.setAlternatingRowColors(True)
+        self.list_view.setHorizontalHeaderLabels(["path", "subject", "session"])
+        self.add_button = QPushButton("Add to BIDS directory")
+        self.add_button.clicked.connect(self.add)
+
+        layout = QGridLayout()
+        layout.addWidget(self.label, 0, 0, 1, 2)
+        layout.addWidget(self.add_files_button, 1, 0, 1, 1)
+        layout.addWidget(self.checkbox, 1, 1, 1, 1, Qt.AlignRight)
+        layout.addWidget(self.list_view, 2, 0, 1, 2)
+        layout.addWidget(self.add_button, 3, 0, 1, 2)
+
+        self.window.setLayout(layout)
+
+
+    def on_state_changed(self, state):
+        if state == Qt.Checked:
+            self.iso = True
+        else:
+            self.iso = False
+
+
+    def add_files(self):
+        """
+
+
+        Returns
+        -------
+        None.
+
+        """
+        dicom_folder = QFileDialog.getOpenFileName(self, 'Select DICOM zip file', options=QFileDialog.DontUseNativeDialog)[0]
+        if dicom_folder == None or dicom_folder == '':
+            return
+        rowPosition = len(self.list_to_add)
+        self.list_view.insertRow(rowPosition)
+        self.list_view.setItem(rowPosition , 0, QTableWidgetItem(dicom_folder))
+        self.list_view.setItem(rowPosition , 1, QTableWidgetItem(None))
+        self.list_view.setItem(rowPosition , 2, QTableWidgetItem(None))
+
+
+    def add(self):
+        """
+
+
+        Returns
+        -------
+        None.
+
+        """
+        def getPassword():
+            password, ok = QInputDialog.getText(self, "SSH Key Passphrase", "Unlocking SSH key with passphrase?", 
+                                    QLineEdit.Password)
+            passphrase = None
+            if ok and password:
+                passphrase = password
+            return passphrase
+        
+        passphrase = getPassword()
+        
+        #get items
+        for i in range(self.list_view.rowCount()):
+            self.list_to_add.append((self.list_view.item(i,0).text(), self.list_view.item(i,1).text() if self.list_view.item(i,1).text() != '' else None, self.list_view.item(i,2).text() if self.list_view.item(i,2).text() != '' else None))
+
+        # self.parent.setEnabled(False)
+        # self.thread = QThread()
+        # self.worker = AddServerWorker(self.bids, self.list_to_add, self.iso, self.job_json, passphrase=passphrase)
+        # self.worker.moveToThread(self.thread)
+        # self.thread.started.connect(self.worker.run)
+        # self.worker.in_progress.connect(self.is_in_progress)
+        # self.worker.error.connect(self.error_handler)
+        # self.worker.jobs_submitted.connect(self.submitted_jobs)
+        # self.worker.finished.connect(self.thread.quit)
+        # self.worker.finished.connect(self.worker.deleteLater)
+        # self.thread.finished.connect(self.thread.deleteLater)
+        # self.thread.finished.connect(lambda: self.end_add())
+        # self.thread.start()
+        
+        # Do the job here and not in a thread 
+        self.hide()
+        self.is_in_progress(('AddServer', True))
+        jobs_id = []
+            
+        for item in self.list_to_add:
+
+            dicom = item[0]
+
+            if not ".zip" in dicom:
+                print ('Not a zip file')
+                return 
+    
+            dicom_file = dicom
+            sub = item[1]
+            ses = item[2]
+    
+            try:
+                args = [dicom_file]
+                if self.iso:
+                    args.append('-iso')
+                job_id = submit_job(self.bids.root_dir, sub, ses, self.job_json, args, use_asyncssh=True, passphrase=passphrase)
+                # job_id = ['Submitted batch job 2447621']
+                if job_id is not None and job_id != []:
+                    jobs_id.append(*job_id)
+    
+            except Exception as e:
+                self.error_handler(e)
+        
+        self.is_in_progress(('AddServer', False))
+        self.submitted_jobs(jobs_id)
+    
+    def is_in_progress(self, in_progress):
+        self.parent.parent.work_in_progress.update_work_in_progress(in_progress)
+        
+    
+    def error_handler(self, exception):
+        QMessageBox.critical(self, type(exception).__name__, str(exception))
+        
+    def submitted_jobs(self, jobs_id):
+        print('submitted jobs')
+        class SubmittedJobsDialog(QDialog):
+            def __init__(self, results, parent=None):
+                super().__init__()
+        
+                self.setWindowTitle('Jobs Submitted')
+                self.setGeometry(300, 300, 400, 300)
+                
+                layout = QVBoxLayout(self)
+                
+                # Create and populate the QListWidget
+                self.listWidget = QListWidget(self)
+                for result in results:
+                    self.listWidget.addItem(result)
+                
+                layout.addWidget(self.listWidget)
+        
+                # Create OK button
+                self.okButton = QPushButton('OK', self)
+                self.okButton.clicked.connect(self.accept)
+                
+                # Add OK button to layout
+                buttonLayout = QHBoxLayout()
+                buttonLayout.addStretch()
+                buttonLayout.addWidget(self.okButton)
+                
+                layout.addLayout(buttonLayout)
+                
+        job_dialog = SubmittedJobsDialog(jobs_id)
+        # job_submitted_window = QMainWindow()
+        # job_submitted_window.setCentralWidget(job_dialog)
+        job_dialog.exec_()
     
 
     def end_add(self):
@@ -4694,11 +4986,11 @@ class AddWorker(QObject):
                 with zipfile.ZipFile(dicom, 'r') as zip_ref:
                     zip_ref.extractall(directory_to_extract_to)
                 dicom = directory_to_extract_to
-
+    
             DICOM_FOLDER = dicom
             PATIENT_ID = item[1]
             SESSION = item[2]
-
+    
             try:
                 self.bids.convert_dicoms_to_bids(dicomfolder = DICOM_FOLDER,
                                                     pat_id      = PATIENT_ID,
@@ -4707,8 +4999,91 @@ class AddWorker(QObject):
 
             except Exception as e:
                 pass
+        
+        # if ".zip" in dicom:
+        #     # upload zip onto the cluster in a /tmp folder  
+        #     pass
             
         self.in_progress.emit(('Add',False))    
+        self.finished.emit()
+        
+
+# =============================================================================
+# AddWorker
+# =============================================================================
+class AddServerWorker(QObject):
+    """
+    """
+    finished = pyqtSignal()
+    in_progress = pyqtSignal(tuple)
+    error = pyqtSignal(Exception)
+    jobs_submitted = pyqtSignal(list)
+
+    def __init__(self, bids, list_to_add, iso, job_json, passphrase=None):
+        """
+
+
+        Parameters
+        ----------
+        bids : TYPE
+            DESCRIPTION.
+        list_to_add : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.bids = bids
+        self.list_to_add = list_to_add
+        self.iso = iso
+        self.job_json = job_json
+        self.passphrase = passphrase
+
+
+    def run(self):
+        """
+
+
+        Returns
+        -------
+        None.
+
+        """
+        self.in_progress.emit(('AddServer', True))
+        
+        jobs_id = []
+            
+        for item in self.list_to_add:
+
+            dicom = item[0]
+
+            if not ".zip" in dicom:
+                print ('Not a zip file')
+                return 
+    
+            dicom_file = dicom
+            sub = item[1]
+            ses = item[2]
+    
+            try:
+                args = [dicom_file]
+                if self.iso:
+                    args.append('-iso')
+                job_id = submit_job(self.bids.root_dir, sub, ses, self.job_json, args, use_asyncssh=True, passphrase=self.passphrase)
+                if job_id is not None and job_id != []:
+                    jobs_id.append(*job_id)
+    
+            except Exception as e:
+                self.error.emit(e)
+        
+        # if ".zip" in dicom:
+        #     # upload zip onto the cluster in a /tmp folder  
+        #     pass
+        self.jobs_submitted.emit(jobs_id)
+        self.in_progress.emit(('AddServer',False))    
         self.finished.emit()
 
 

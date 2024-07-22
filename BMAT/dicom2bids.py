@@ -19,6 +19,7 @@ import pandas as pd
 from pydicom import dcmread
 import logging
 import sys
+import portalocker
 # from nipype.interfaces.dcm2nii import Dcm2niix
 
 from tqdm.auto import tqdm
@@ -35,7 +36,7 @@ class BIDSHandler:
     """
     
     
-    def __init__(self, root_dir, logger=None):
+    def __init__(self, root_dir, sequences_csv=None, logger=None):
         """
         
 
@@ -77,8 +78,13 @@ class BIDSHandler:
         self.logger = logging.getLogger('dicom2bids')
         self.logger.setLevel(logging.DEBUG)
         
-        self.sequences_df = pd.read_csv('sequences.csv')
-        self.sequences_df.fillna('', inplace=True)
+        if sequences_csv == None:
+            dir_path = os.path.dirname(os.path.abspath(__file__))
+            self.sequences_df = pd.read_csv(pjoin(dir_path, 'sequences.csv'))
+            self.sequences_df.fillna('', inplace=True)
+        else:
+            self.sequences_df = pd.read_csv(sequences_csv)
+            self.sequences_df.fillna('', inplace=True)
         
         self.wrong_extensions = ['.jsn', '.bval', '.bvec', '.nii', '.gz', '.jpg']
         
@@ -249,7 +255,7 @@ class BIDSHandler:
 
         """
         if not pexists(dirpath):
-            os.mkdir(dirpath)
+            os.makedirs(dirpath)
             
 
     def convert_all_dicoms(self, directory, convert=True, logger=logging):
@@ -1020,7 +1026,7 @@ class BIDSHandler:
 
 
     def convert_dicoms_to_bids(self, dicomfolder, pat_id=None, session=None,
-                               return_dicom_series=False, logger=logging):
+                               return_dicom_series=False, copy_dicomfolder=True, logger=logging):
         """
         
 
@@ -1063,12 +1069,13 @@ class BIDSHandler:
         # print("Debug, why does it stop")
         # Rename and move all (interesting) converted files into the bids directory
         self.rename_and_move_nifti(dicom_series, pat_id, session, logger=logger)
-
-        self.copy_dicomfolder_to_sourcedata(dicomfolder, pat_id, session, logger=logger)
+        
+        self.anonymisation(pat_id, session, dicomfolder, logger=logger)
+        
+        if copy_dicomfolder:
+            self.copy_dicomfolder_to_sourcedata(dicomfolder, pat_id, session, logger=logger)
 
         # pat_name, pat_date = self.separate_dicoms(dicomfolder, pat_id, session)
-
-        self.anonymisation(pat_id, session, logger=logger)
         
         logging.info(f"[INFO] done for patient {pat_id}")
 
@@ -1321,7 +1328,7 @@ class BIDSHandler:
         # participants_tsv_df.to_csv(pjoin(self.root_dir, "participants.tsv"), index=False, sep='\t')
 
 
-    def anonymisation(self, pat_id, pat_ses, logger=logging):
+    def anonymisation(self, sub, ses, src, logger=logging):
         """
         
 
@@ -1339,168 +1346,86 @@ class BIDSHandler:
         None.
 
         """
+
+        wrong_extensions = ['.jsn', '.bval', '.bvec', '.nii', '.gz', '.jpg', 'json']
         
-        src = pjoin(self.root_dir, f'sourcedata', f'sub-{pat_id}', f'ses-{pat_ses}')
-        
-        wrong_extensions = ['.jsn', '.bval', '.bvec', '.nii', '.gz', '.jpg']
-        
-        # pat_name = None
-        # pat_date = None
-        # pat_folder_id = None
-        save_participants_json = False
-        if pexists(pjoin(self.root_dir, "participants.json")):
-            with open(pjoin(self.root_dir, "participants.json")) as part_json:
-                participants_json = json.load(part_json)
-        else:
+        if not pexists(pjoin(self.root_dir, "participants.json")):
             participants_json = {
                                  "participant_id":{"Description":"Corresponding ID of the participant in the BIDS directory"},
-                                 "age":{"Description": "age of the participant",
-                                        "Units": "years",
-                                        "dicom_tags":["PatientAge"]
-                                        },
+                                 "session":{"Description":"Session ID"},
                                  "sex":{"Description": "sex of the participant as reported by the participant",
                                         "Levels": {"M": "male",
                                                    "F": "female"
                                                    },
                                         "dicom_tags":["PatientSex"]
                                         },
-                                 "ses-01":{"Description":"Date of the MRI session number 01",
-                                           "dicom_tags":["AcquisitionDate", "Date"]}
+                                 "age":{"Description": "age of the participant the time of session",
+                                        "Units": "years",
+                                        "dicom_tags":["PatientAge"]
+                                        },
+                                 "date":{"Description":"Date of the session", "dicom_tags":["Date","AcquisitionDate","AcquisitionDateTime"]}
                                  }
-            save_participants_json = True
-            
-        if pexists(pjoin(self.root_dir, "participants.tsv")):
-            participants_tsv = pd.read_csv(pjoin(self.root_dir, "participants.tsv"), sep='\t').to_dict()
+            with open(pjoin(self.root_dir, 'participants.json'), 'w') as fp:
+                json.dump(participants_json, fp)
         else:
-            participants_tsv = {'participant_id':{}, 'age':{}, 'sex':{}, 'ses-01':{}}
-                        
-        if f'ses-{pat_ses}' not in participants_tsv.keys():
-            sessions = [x for x in participants_json.keys() if 'ses' in x]
-            last_ses = sessions[-1]
-            # participants_json[f'ses-{pat_ses}'] = {"Description":"Date of the MRI session number 01", "dicom_tags":["AcquisitionDate", "Date"]}
-            participants_json_list = list(participants_json.items())
-            participants_tsv_list = list(participants_tsv.items())
-            last_ses_idx = list(participants_json.keys()).index(last_ses)
-            participants_json_list.insert(last_ses_idx+1, (f'ses-{pat_ses}', {"Description":f"Date of the MRI session number {pat_ses}", "dicom_tags":["AcquisitionDate", "Date"]}))
-            participants_tsv_list.insert(last_ses_idx+1, (f'ses-{pat_ses}', {}))
-            participants_json = dict(participants_json_list)
-            participants_tsv = dict(participants_tsv_list)
-            save_participants_json = True
+            with open(pjoin(self.root_dir, "participants.json")) as part_json:
+                participants_json = json.load(part_json)            
         
+        sub_ses_df = pd.DataFrame()
+        sub_ses_df.at[0, 'participant_id'] = f'sub-{sub}'
+        sub_ses_df.at[0, 'session'] = f'ses-{ses}'
         participants_json_keys = list(participants_json.keys())
-        participants_json_keys.remove('participant_id')
-        sessions = [x for x in participants_json_keys if 'ses' in x]
-        for ses in sessions:
-            if ses != f'ses-{pat_ses}':
-                participants_json_keys.remove(ses)
-        # print(participants_json_keys)
-        tags = [(x, participants_json.get(x).get('dicom_tags')) for x in participants_json_keys]
-        results = [None]*len(tags)
-        tags_bool = [False]*len(tags)
+        try:
+            participants_json_keys.remove('participant_id')
+            participants_json_keys.remove('session')
+        except ValueError:
+            pass
+        infos = {}
+        for key in participants_json_keys:
+            infos[key] = False
         
         for root, dirs, files in os.walk(src):
             for file in files:
                 if "." not in file[0] or not any([ext in file for ext in wrong_extensions]):# exclude non-dicoms, good for messy folders
                     # read the file
                     ds = dcmread(pjoin(root,file), force=True)
-
-            #         if pat_name == None:
-            #             pat_name = ds.get('PatientName')
-            #         if pat_name == None:
-            #             pat_name = ds.get('Name')
-                    # if pat_date == None:
-                    #     pat_date = ds.get('AcquisitionDateTime')
-                    # if pat_date == None:
-                    #     pat_date = ds.get('AcquisitionDate')
-                    # if pat_date == None:
-                    #     pat_date = ds.get('Date')
-                    # if pat_date == None:
-                    #     pat_date = ds.get('ContentDate')
-                    # pat_folder_id = ds.get('PatientID')
-                
-            #     if pat_name != None and pat_date != None and pat_folder_id != None:
-            #         break
+                    
+                    for key in infos.keys():
+                        if not infos[key]:
+                            for tag in participants_json[key]['dicom_tags']:
+                                val = ds.get(tag)
+                                if val != None:
+                                    sub_ses_df.at[0, key] = val
+                                    infos[key] = True
+                                    
+                    if all(infos.values()):
+                        break
+        
+        # if pexists(pjoin(self.root_dir, "participants.tsv")):
+        #     participants_tsv = pd.read_csv(pjoin(self.root_dir, "participants.tsv"), sep='\t')
+        # else:
+        #     participants_tsv = {'participant_id':{}, 'age':{}, 'sex':{}, 'ses-01':{}}
+        
+        create_tsv = False
+        if not pexists(pjoin(self.root_dir, "participants.tsv")):
+            create_tsv = True
+            open(pjoin(self.root_dir, "participants.tsv"), 'a').close()
             
-            # if pat_name != None and pat_date != None and pat_folder_id != None:
-            #     break
-                    i = 0
-                    for tag in tags:
-                        dcm_tags = tag[1]
-                        for dcm_tag in dcm_tags:
-                            val = ds.get(dcm_tag)
-                            if val != None:
-                                results[i] = val
-                                tags_bool[i] = True
-                                break
-                        i = i+1
-                if all(tags_bool):
-                    break
-            if all(tags_bool):
-                break
-
-        # # check if new patient
-        # if f'sub-{pat_id}' in participants_tsv['participant_id'].keys():
-        #     key_num = list(participants_tsv['participant_id'].values()).index(f'sub-{pat_id}')
-        #     if f'ses-{pat_ses}' not in anonym.keys():
-        #         anonym[f'ses-{pat_ses}'] = {}
-        #     # update dicionary with the date of the new session
-        #     anonym[f'ses-{pat_ses}'][key_num] = pd.Timestamp(pat_date)
-        # else:
-        #     # add new patient
-        #     key_num = len(anonym['participant_id'])
-        #     anonym['participant_name'][key_num] = pat_name
-        #     anonym['participant_id'][key_num] = f'sub-{pat_id}'
-        #     anonym['patient_id'][key_num] = pat_folder_id
-        #     if f'ses-{pat_ses}' not in anonym.keys():   
-        #         anonym[f'ses-{pat_ses}'] = {}
-        #     anonym[f'ses-{pat_ses}'][key_num] = pd.Timestamp(pat_date)
-        
-        # if f'sub-{pat_id}' in participants_tsv['participant_id'].keys():
-        #     key_num = list(participants_tsv['participant_id'].values()).index(f'sub-{pat_id}')
-        #     if f'ses-{pat_ses}' not in participants_tsv.keys():
-        #         participants_tsv[f'ses-{pat_ses}'] = {}
-        #     # update dicionary with the date of the new session
-        #     participants_tsv[f'ses-{pat_ses}'][key_num] = pd.Timestamp(pat_date)
-        # else:
-        #     # add new patient
-        #     key_num = len(participants_tsv['participant_id'])
-        #     participants_tsv['participant_id'][key_num] = f'sub-{pat_id}'
-        #     if f'ses-{pat_ses}' not in participants_tsv.keys():   
-        #         participants_tsv[f'ses-{pat_ses}'] = {}
-        #     participants_tsv[f'ses-{pat_ses}'][key_num] = pd.Timestamp(pat_date)
-        # print(tags)
-        # print(results)
-        if f'sub-{pat_id}' in participants_tsv['participant_id'].values():
-            key_num = list(participants_tsv['participant_id'].values()).index(f'sub-{pat_id}')
-        else:
-            # add new patient
-            key_num = len(participants_tsv['participant_id'])
-            participants_tsv['participant_id'][key_num] = f'sub-{pat_id}'
-        i = 0
-        for tag in tags:
-            if tag[0] not in participants_tsv.keys():
-                participants_tsv[tag[0]] = {}
-            # update dicionary with the date of the new session
-            if 'ses' in tag[0]:
-                if results[i] != None and results[i] != '':
-                    participants_tsv[tag[0]][key_num] = pd.Timestamp(results[i])
-                else:
-                    participants_tsv[tag[0]][key_num] = 'n/a'
+        with portalocker.Lock(pjoin(self.root_dir, "participants.tsv"), 'r+', timeout=60) as f:
+            if create_tsv:
+                print('create tsv')
+                participants_df = pd.DataFrame()
             else:
-                if results[i] != None and results[i] != '':
-                    participants_tsv[tag[0]][key_num] = results[i]
-                else:
-                    participants_tsv[tag[0]][key_num] = 'n/a'
-            i = i+1
-
-        # Save anonym dic to csv
-        participants_tsv_df = pd.DataFrame(participants_tsv)
-        participants_tsv_df.to_csv(pjoin(self.root_dir, "participants.tsv"), index=False, sep='\t')
-        
-        # Save participants_json
-        if save_participants_json:
-            with open(pjoin(self.root_dir, 'participants.json'), 'w') as fp:
-                json.dump(participants_json, fp)
+                f.seek(0)
+                try:
+                    participants_df = pd.read_csv(f, sep='\t')
+                except Exception:
+                    participants_df = pd.DataFrame()
+            participants_df = pd.concat([participants_df, sub_ses_df])
+            participants_df.sort_values(['participant_id', 'session'], ascending=[True, True], inplace=True)
+            f.seek(0)
+            participants_df.to_csv(f, index=False, sep='\t')
+            f.truncate()
 
         logging.info('[INFO] Anonymisation done')
         
