@@ -26,3 +26,4 @@ html5lib==1.1
 asyncio==3.4.3
 asyncssh==2.15.0
 paramiko==3.4.0
+portalocker==2.10.0
