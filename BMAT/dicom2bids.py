@@ -528,7 +528,7 @@ class BIDSHandler:
         
         if not pexists(pjoin(bids_dir, "README")):
             from shutil import copy as shcopy
-            shcopy("readme_example", 
+            shcopy(pjoin(os.path.dirname(os.path.abspath(__file__)), "readme_example"), 
                    pjoin(bids_dir, "README"))
         
         # print("WTF-return make_directories_from")

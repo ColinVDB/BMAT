@@ -61,7 +61,7 @@ def map_path(bids_path, shared_folders):
     
     for shared_folder in shared_folders.keys():
         if is_subpath(bids_path, shared_folder):
-            return pjoin(shared_folders[shared_folder], os.path.relpath(bids_path, shared_folder))
+            return pjoin(shared_folders[shared_folder], os.path.relpath(bids_path, shared_folder)).replace('\\','/')
     
     return None
 
