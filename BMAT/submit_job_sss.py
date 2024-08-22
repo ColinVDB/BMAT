@@ -154,7 +154,7 @@ def sbatch_command(bids, sub, ses, job_info, args=[]):
     return sbatch_cmd
 
 
-def submit_job(bids_path, sub, ses, job_json, args=[], use_asyncssh=True, passphrase=None):
+def submit_job(bids_path, sub, ses, job_json, args=[], use_asyncssh=True, passphrase=None, one_job=False):
     
     print('submit_job')
     
@@ -188,11 +188,32 @@ def submit_job(bids_path, sub, ses, job_json, args=[], use_asyncssh=True, passph
     
     # for all subjects and sess
     subjects_and_sessions = []
-    
-    if sub == 'all':
-        for dirs in os.listdir(bids_path):
-            if 'sub-' in dirs:
-                subj = dirs.split('-')[1]
+    if one_job:
+        subjects_and_sessions = (sub, ses)
+    else:
+        if sub == 'all':
+            for dirs in os.listdir(bids_path):
+                if 'sub-' in dirs:
+                    subj = dirs.split('-')[1]
+                    sess = []
+                    if ses == 'all':
+                        for d in os.listdir(pjoin(bids_path, f'sub-{subj}')):
+                            if 'ses-' in d:
+                                s = d.split('-')[1]
+                                sess.append(s)
+                    else:
+                        ses_details = ses.split(',')
+                        for s in ses_details:
+                            if os.path.isdir(pjoin(bids_path, f'sub-{subj}', f'ses-{s}')):
+                                sess.append(s)
+                    subjects_and_sessions.append((subj, sess))
+            
+        else:
+        
+            sub_details = sub.split(',')
+            ses_details = ses.split(',')
+            
+            for sub in sub_details:
                 sess = []
                 if ses == 'all':
                     for d in os.listdir(pjoin(bids_path, f'sub-{subj}')):
@@ -204,25 +225,14 @@ def submit_job(bids_path, sub, ses, job_json, args=[], use_asyncssh=True, passph
                     for s in ses_details:
                         if os.path.isdir(pjoin(bids_path, f'sub-{subj}', f'ses-{s}')):
                             sess.append(s)
-                subjects_and_sessions.append((subj, sess))
-        
-    else:
-    
-        sub_details = sub.split(',')
-        ses_details = ses.split(',')
-        
-        for sub in sub_details:
-            sess = []
-            for ses in ses_details:
-                sess.append(ses)
-            subjects_and_sessions.append((sub, sess))
+                subjects_and_sessions.append((sub, sess))
             
-    subjects_and_sessions = sorted(subjects_and_sessions)
+        subjects_and_sessions = sorted(subjects_and_sessions)
     
     # Try the connection
     try:
         if use_asyncssh:
-            jobs_submitted = asyncio.run(asyncssh_submit_job(server_bids_path, subjects_and_sessions, server_info, job_info, args, passphrase=passphrase))
+            jobs_submitted = asyncio.run(asyncssh_submit_job(server_bids_path, subjects_and_sessions, server_info, job_info, args, passphrase=passphrase, one_job=one_job))
             
         else:
             jobs_submitted = asyncio.run(paramiko_submit_job(server_bids_path, subjects_and_sessions, server_info, job_info, args))
@@ -259,7 +269,7 @@ async def run_ssh_command(ssh, command):
         return None
 
 
-async def asyncssh_submit_job(server_bids_path, subjects_and_sessions, server_info, job_info, args=[], passphrase=None):
+async def asyncssh_submit_job(server_bids_path, subjects_and_sessions, server_info, job_info, args=[], passphrase=None, one_job=False):
     
     # SSH connection setup
     # Connect to SSH server
@@ -268,32 +278,60 @@ async def asyncssh_submit_job(server_bids_path, subjects_and_sessions, server_in
         raise ServerConnectionError("Problem during connection to the server")
     
     job_submitted = []
-    for sub, sess in subjects_and_sessions:
-        for ses in sess:
-            print(sub, ses)
+    if one_job:
+        sub = subjects_and_sessions[0]
+        ses = subjects_and_sessions[1]
+        try:
+            sbatch_cmd = sbatch_command(server_bids_path, sub, ses, job_info, args=args)
             
-            try:
-                sbatch_cmd = sbatch_command(server_bids_path, sub, ses, job_info, args=args)
-                
-                print(sbatch_cmd)
-                
-                # Run command on SSH server
-                result = await run_ssh_command(ssh, f'bash -l -c \"{sbatch_cmd}\"')
-                output = result.stdout
-                error = result.stderr
-                print(output)
-                print(error)
-                
-                job_submitted.append(output)
-                
-            except Exception as e:
-                raise JobSubmissionError(f"Error {e} while submiting a job")
+            print(sbatch_cmd)
             
-            finally:
-                # close connection
-                ssh.close()
-                await ssh.wait_closed()
-                print('connection closed ')
+            # Run command on SSH server
+            result = await run_ssh_command(ssh, f'bash -l -c \"{sbatch_cmd}\"')
+            output = result.stdout
+            error = result.stderr
+            print(output)
+            print(error)
+            
+            job_submitted.append(output)
+            
+        except Exception as e:
+            raise JobSubmissionError(f"Error {e} while submiting a job")
+        
+        finally:
+            # close connection
+            ssh.close()
+            await ssh.wait_closed()
+            print('connection closed ')
+            return job_submitted
+    else:
+        for sub, sess in subjects_and_sessions:
+            for ses in sess:
+                print(sub, ses)
+                
+                try:
+                    sbatch_cmd = sbatch_command(server_bids_path, sub, ses, job_info, args=args)
+                    
+                    print(sbatch_cmd)
+                    
+                    # Run command on SSH server
+                    result = await run_ssh_command(ssh, f'bash -l -c \"{sbatch_cmd}\"')
+                    output = result.stdout
+                    error = result.stderr
+                    print(output)
+                    print(error)
+                    
+                    job_submitted.append(output)
+                    
+                except Exception as e:
+                    raise JobSubmissionError(f"Error {e} while submiting a job")
+                
+                finally:
+                    # close connection
+                    ssh.close()
+                    await ssh.wait_closed()
+                    print('connection closed ')
+                    return job_submitted
     return job_submitted
 
 

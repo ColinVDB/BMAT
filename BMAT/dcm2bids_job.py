@@ -6,7 +6,7 @@ Created on Thu Mar  7 11:45:28 2024
 @author: colin
 """
 
-from dicom2bids_cluster import *
+from dicom2bids import *
 import os
 from os.path import join as pjoin
 from os.path import exists as pexists

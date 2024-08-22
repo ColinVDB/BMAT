@@ -1395,8 +1395,11 @@ class BIDSHandler:
                             for tag in participants_json[key]['dicom_tags']:
                                 val = ds.get(tag)
                                 if val != None:
-                                    sub_ses_df.at[0, key] = val
+                                    sub_ses_df.at[0, key] = str(val)
                                     infos[key] = True
+                                    break
+                            if val == None:
+                                sub_ses_df.at[0, key] = val
                                     
                     if all(infos.values()):
                         break

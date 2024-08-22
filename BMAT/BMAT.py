@@ -152,6 +152,8 @@ class MainWindow(QMainWindow):
                                 import_r = pjoin(root, d).replace(os.sep,'.')
                                 f = open(pjoin(root, d, file))
                                 jsn = json.load(f)
+                                if jsn.get('name') == None or jsn.get('source_code') == None or jsn.get('import_name') == None or jsn.get('attr') == None:
+                                    continue
                                 self.pipelines_name.append(jsn.get('name'))
                                 import_name = jsn.get('import_name')
                                 attr = jsn.get('attr')
@@ -170,6 +172,8 @@ class MainWindow(QMainWindow):
                             import_r = pjoin(self.bmat_path, 'LocalPipelines', dirs).replace(os.sep,'.')
                             f = open(pjoin(self.bmat_path, 'LocalPipelines', dirs, file))
                             jsn = json.load(f)
+                            if jsn.get('name') == None or jsn.get('source_code') == None or jsn.get('import_name') == None or jsn.get('attr') == None:
+                                continue
                             self.local_pipelines_name.append(jsn.get('name'))
                             import_name = jsn.get('import_name')
                             attr = jsn.get('attr')
@@ -2395,12 +2399,79 @@ class AddWindow(QMainWindow):
         qr.moveCenter(cp)
         self.move(qr.topLeft())
         
+    
         
+class AddServerWindow(QMainWindow):
+    """
+    """
+    
+
+    def __init__(self, parent):
+        """
+        
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+
+        self.setWindowTitle("Add MRI session on SSS cluster")
+        self.window = QWidget(self)
+        self.setCentralWidget(self.window)
+        self.center()
+        
+        # get job_info
+        path = os.path.dirname(os.path.abspath(__file__))
+        if not pexists(pjoin(path, 'dcm2bids_sss.json')):
+            print('[ERROR] dcm2bids_sss.json file not found')
+        
+        self.job_json = None
+        with open(pjoin(path, 'dcm2bids_sss.json'), 'r') as f:
+            self.job_json = json.load(f)
+        
+        self.tabs = QTabWidget(self)
+        
+        self.main_tab = AddServerTab(self)
+        self.job_tab = JobTab(self, self.job_json.get("slurm_infos"))
+        
+        self.tabs.addTab(self.main_tab, "Main")
+        self.tabs.addTab(self.job_tab, "Slurm Job")
+        
+        layout = QVBoxLayout()
+        layout.addWidget(self.tabs)
+
+        self.window.setLayout(layout)
+
+
+    def center(self):
+        """
+        
+
+        Returns
+        -------
+        None.
+
+        """
+        qr = self.frameGeometry()
+        cp = QDesktopWidget().availableGeometry().center()
+        qr.moveCenter(cp)
+        self.move(qr.topLeft())
+
+    
         
 # =============================================================================
 # AddWindow
 # =============================================================================
-class AddServerWindow(QMainWindow):
+class AddServerTab(QWidget):
     """
     """
 
@@ -2424,19 +2495,7 @@ class AddServerWindow(QMainWindow):
         self.bids = self.parent.bids
         # self.threads_pool = self.parent.threads_pool
         
-        # get job_info
-        path = os.path.dirname(os.path.abspath(__file__))
-        if not pexists(pjoin(path, 'dcm2bids_sss.json')):
-            print('[ERROR] dcm2bids_sss.json file not found')
-            
-        self.job_json = None
-        with open(pjoin(path, 'dcm2bids_sss.json'), 'r') as f:
-            self.job_json = json.load(f)
-
-        self.setWindowTitle("Add MRI session on SSS cluster")
-        self.window = QWidget(self)
-        self.setCentralWidget(self.window)
-        self.center()
+        self.job_json = self.parent.job_json
 
         self.list_to_add = []
 
@@ -2468,7 +2527,7 @@ class AddServerWindow(QMainWindow):
         layout.addWidget(self.list_view, 2, 0, 1, 2)
         layout.addWidget(self.add_button, 3, 0, 1, 2)
 
-        self.window.setLayout(layout)
+        self.setLayout(layout)
 
 
     def on_state_changed(self, state):
@@ -2635,6 +2694,55 @@ class AddServerWindow(QMainWindow):
         cp = QDesktopWidget().availableGeometry().center()
         qr.moveCenter(cp)
         self.move(qr.topLeft())
+        
+        
+        
+class JobTab(QWidget):
+    """
+    """
+    
+    def __init__(self, parent, slurm_infos):
+        """
+        
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        
+        self.parent = parent
+        self.bids = self.parent.bids
+        self.slurm_info = slurm_infos
+        self.setMinimumSize(500, 200)
+        self.slurm_info_input = {}
+        layout = QVBoxLayout()
+        for key in self.slurm_info.keys():
+            key_label = QLabel(key)
+            key_input = QLineEdit(self)
+            key_input.setPlaceholderText(self.slurm_info[key])
+            key_layout = QHBoxLayout()
+            self.slurm_info_input[f'{key}_input'] = key_input
+            key_layout.addWidget(key_label)
+            key_layout.addWidget(key_input)
+            layout.addLayout(key_layout)
+            
+        self.setLayout(layout)
+            
+            
+    def get_slurm_job_info(self):
+        
+        slurm_job_info = {}
+        for key in self.slurm_info.keys():
+            key_text = self.slurm_info_input[f'{key}_input'].text()
+            if key_text == None or key_text == "":
+                key_text = self.slurm_info_input[f'{key}_input'].placeholderText()
+                
+            slurm_job_info[key] = key_text
+        
+        return slurm_job_info
+        
 
 
 # =============================================================================
