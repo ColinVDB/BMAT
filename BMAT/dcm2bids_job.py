@@ -17,6 +17,7 @@ import random
 import shutil
 import zipfile
 import time
+from pydicom import dcmread
 
 
 def create_iso(folder_path, iso_path):
@@ -53,17 +54,18 @@ def separate_dicoms(input_dir, output_dir):
         return string.lower()
 
     dst = output_dir
-
+    
+    wrong_extensions = ['.jsn', '.bval', '.bvec', '.nii', '.gz', '.jpg']
     print('reading file list...')
     unsortedList = []
     corresponding_root = []
     for root, dirs, files in os.walk(src):
         for file in files:
-            if "." not in file[0] or not any([ext in file for ext in self.wrong_extensions]):# exclude non-dicoms, good for messy folders
+            if "." not in file[0] or not any([ext in file for ext in wrong_extensions]):# exclude non-dicoms, good for messy folders
                 unsortedList.append(os.path.join(root, file))
                 corresponding_root.append(root)
 
-    logging.info('%s files found.' % len(unsortedList))
+    print('%s files found.' % len(unsortedList))
 
     pat_name = None
     pat_date = None

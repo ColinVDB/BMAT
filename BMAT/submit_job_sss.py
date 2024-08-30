@@ -48,6 +48,70 @@ class ServerConnectionError(Exception):
     """Custom exception class"""
     def __init__(self, message):
         super().__init__(message)
+        
+def get_session_list(bids, subj, ses_details, check_if_exist=True):
+    """Helper function to get the list of sessions for a given subject."""
+    sess = []
+    if ses_details == 'all':
+        for d in os.listdir(pjoin(bids, f'sub-{subj}')):
+            if d.startswith('ses-'):
+                sess.append(d.split('-')[1])
+    else:
+        for s in ses_details.split(','):
+            if '-' in s:
+                s0, s1 = map(int, s.split('-'))
+                for si in range(s0, s1 + 1):
+                    si_str = str(si).zfill(2)
+                    if check_if_exist:
+                        if os.path.isdir(pjoin(bids, f'sub-{subj}', f'ses-{si_str}')):
+                            sess.append(si_str)
+                    else:
+                        sess.append(si_str)
+                        
+            else:
+                if check_if_exist:
+                    if os.path.isdir(pjoin(bids, f'sub-{subj}', f'ses-{s}')):
+                        sess.append(s)
+                else:
+                    sess.append(s)
+    return sess
+
+def process_subject_range(bids, sub_range, ses_details, check_if_exist=True):
+    """Helper function to process a range of subjects."""
+    subjects_and_sessions = []
+    sub0, sub1 = map(int, sub_range.split('-'))
+    for subi in range(sub0, sub1 + 1):
+        subi_str = str(subi).zfill(3)
+        if not os.path.isdir(pjoin(bids, f'sub-{subi_str}')) and check_if_exist:
+            continue
+        sess = get_session_list(bids, subi_str, ses_details, check_if_exist=check_if_exist)
+        subjects_and_sessions.append((subi_str, sess))
+    return subjects_and_sessions
+
+def find_subjects_and_sessions(bids, sub, ses, check_if_exist=True):
+    
+    subjects_and_sessions = []
+
+    if sub == 'all':
+        # Process all subjects
+        for dirs in os.listdir(bids):
+            if dirs.startswith('sub-'):
+                subj = dirs.split('-')[1]
+                sess = get_session_list(bids, subj, ses)
+                subjects_and_sessions.append((subj, sess))
+    else:
+        # Process specified subjects
+        for sub_item in sub.split(','):
+            if '-' in sub_item:
+                subjects_and_sessions.extend(process_subject_range(bids, sub_item, ses, check_if_exist=check_if_exist))
+            else:
+                if not os.path.isdir(pjoin(bids, f'sub-{sub_item}')) and check_if_exist:
+                    print('bruh')
+                    continue
+                sess = get_session_list(bids, sub_item, ses, check_if_exist=check_if_exist)
+                subjects_and_sessions.append((sub_item, sess))
+    
+    return sorted(subjects_and_sessions)
 
 
 def is_subpath(main_path, sub_path):
@@ -154,7 +218,7 @@ def sbatch_command(bids, sub, ses, job_info, args=[]):
     return sbatch_cmd
 
 
-def submit_job(bids_path, sub, ses, job_json, args=[], use_asyncssh=True, passphrase=None, one_job=False):
+def submit_job(bids_path, sub, ses, job_json, args=[], use_asyncssh=True, passphrase=None, one_job=False, check_if_exist=True):
     
     print('submit_job')
     
@@ -186,49 +250,12 @@ def submit_job(bids_path, sub, ses, job_json, args=[], use_asyncssh=True, passph
             args_path.append(arg)
     args = args_path
     
-    # for all subjects and sess
-    subjects_and_sessions = []
     if one_job:
         subjects_and_sessions = (sub, ses)
     else:
-        if sub == 'all':
-            for dirs in os.listdir(bids_path):
-                if 'sub-' in dirs:
-                    subj = dirs.split('-')[1]
-                    sess = []
-                    if ses == 'all':
-                        for d in os.listdir(pjoin(bids_path, f'sub-{subj}')):
-                            if 'ses-' in d:
-                                s = d.split('-')[1]
-                                sess.append(s)
-                    else:
-                        ses_details = ses.split(',')
-                        for s in ses_details:
-                            if os.path.isdir(pjoin(bids_path, f'sub-{subj}', f'ses-{s}')):
-                                sess.append(s)
-                    subjects_and_sessions.append((subj, sess))
-            
-        else:
-        
-            sub_details = sub.split(',')
-            ses_details = ses.split(',')
-            
-            for sub in sub_details:
-                sess = []
-                if ses == 'all':
-                    for d in os.listdir(pjoin(bids_path, f'sub-{subj}')):
-                        if 'ses-' in d:
-                            s = d.split('-')[1]
-                            sess.append(s)
-                else:
-                    ses_details = ses.split(',')
-                    for s in ses_details:
-                        if os.path.isdir(pjoin(bids_path, f'sub-{subj}', f'ses-{s}')):
-                            sess.append(s)
-                subjects_and_sessions.append((sub, sess))
-            
-        subjects_and_sessions = sorted(subjects_and_sessions)
-    
+        subjects_and_sessions = find_subjects_and_sessions(bids_path, sub, ses, check_if_exist=check_if_exist)
+    # print(subjects_and_sessions)
+                
     # Try the connection
     try:
         if use_asyncssh:
@@ -270,7 +297,7 @@ async def run_ssh_command(ssh, command):
 
 
 async def asyncssh_submit_job(server_bids_path, subjects_and_sessions, server_info, job_info, args=[], passphrase=None, one_job=False):
-    
+
     # SSH connection setup
     # Connect to SSH server
     ssh = await connect_to_ssh(server_info["server"]["host"], server_info["server"]["user"], server_info["server"]["key"], passphrase=passphrase)
@@ -279,9 +306,12 @@ async def asyncssh_submit_job(server_bids_path, subjects_and_sessions, server_in
     
     job_submitted = []
     if one_job:
+        # print('one job')
         sub = subjects_and_sessions[0]
         ses = subjects_and_sessions[1]
+        # print(sub, ses)
         try:
+            # print('try')
             sbatch_cmd = sbatch_command(server_bids_path, sub, ses, job_info, args=args)
             
             print(sbatch_cmd)
@@ -305,6 +335,7 @@ async def asyncssh_submit_job(server_bids_path, subjects_and_sessions, server_in
             print('connection closed ')
             return job_submitted
     else:
+        print(subjects_and_sessions)
         for sub, sess in subjects_and_sessions:
             for ses in sess:
                 print(sub, ses)
@@ -324,14 +355,18 @@ async def asyncssh_submit_job(server_bids_path, subjects_and_sessions, server_in
                     job_submitted.append(output)
                     
                 except Exception as e:
-                    raise JobSubmissionError(f"Error {e} while submiting a job")
-                
-                finally:
                     # close connection
+                    print(f'except {e}')
                     ssh.close()
                     await ssh.wait_closed()
                     print('connection closed ')
                     return job_submitted
+                    raise JobSubmissionError(f"Error {e} while submiting a job")
+                
+        # close connection
+        ssh.close()
+        await ssh.wait_closed()
+        print('connection closed ')        
     return job_submitted
 
 
@@ -782,9 +817,9 @@ rm {job_sh_path}
 
 if __name__ == '__main__':
     
-    with open('/home/colin/Programs/BMAT/BMAT/dcm2bids_sss.json', 'r') as f:
-        job_info = json.load(f)
+    # with open('/home/colin/Programs/BMAT/BMAT/dcm2bids_sss.json', 'r') as f:
+    #     job_info = json.load(f)
     
-    job_ids = submit_job('/mnt/cemo-pm/shared/test/bids_test', '005', '01', job_info, args=['/mnt/cemo-pm/shared/test/VANDEN-BULCKE-COLIN.zip', '-iso'], use_asyncssh=True, passphrase='Colma213!')
-    print(job_ids)
+    # job_ids = submit_job('/mnt/cemo-pm/shared/test/bids_test', '005', '01', job_info, args=['/mnt/cemo-pm/shared/test/VANDEN-BULCKE-COLIN.zip', '-iso'], use_asyncssh=True, passphrase='Colma213!')
+    # print(job_ids)
     pass

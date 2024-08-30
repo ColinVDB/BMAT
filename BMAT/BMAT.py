@@ -701,23 +701,41 @@ class AddNewPipelinesWindow(QMainWindow):
         
         self.setCentralWidget(scroll_area)
         
-    def get_github_repositories(self):
-        url = 'https://github.com/orgs/BMAT-Apps/repositories'
-        html = requests.get(url)
-        soup = BeautifulSoup(html.content, 'html5lib')
+    # def get_github_repositories(self):
+    #     url = 'https://github.com/orgs/BMAT-Apps/repositories'
+    #     html = requests.get(url)
+    #     soup = BeautifulSoup(html.content, 'html5lib')
         
-        # Find all repositories
-        repos = soup.find('div', {'class':'org-repos repo-list'})        
-        list_repos = [item for item in repos.findAll('div', {'class':'flex-auto', 'data-view-component':True})]
+    #     # Find all repositories
+    #     repos = soup.find('div', {'class':'org-repos repo-list'})        
+    #     list_repos = [item for item in repos.findAll('div', {'class':'flex-auto', 'data-view-component':True})]
         
-        repos_dic = []
-        for repo in list_repos:
-            rep = {}
-            rep['Name'] = repo.h3.a.text.strip()
-            rep['href'] = repo.h3.a['href']
-            rep['desc'] = repo.p.text.strip()
-            repos_dic.append(rep)
+    #     repos_dic = []
+    #     for repo in list_repos:
+    #         rep = {}
+    #         rep['Name'] = repo.h3.a.text.strip()
+    #         rep['href'] = repo.h3.a['href']
+    #         rep['desc'] = repo.p.text.strip()
+    #         repos_dic.append(rep)
             
+    #     return repos_dic
+    def get_github_repositories(self):
+        url = 'https://api.github.com/orgs/BMAT-Apps/repos'
+        response = requests.get(url)
+        data = response.json()
+        repos_dic = []
+        for repo in data:
+            rep = {
+                'Name': repo['name'],
+                'href': repo['html_url'],
+                'desc': repo['description'] if repo['description'] else 'No description',
+                'stars': repo['stargazers_count'],
+                'forks': repo['forks_count'],
+                'issues': repo['open_issues_count'],
+                'language': repo['language'] if repo['language'] else 'N/A',
+                'last_updated': repo['updated_at']
+            }
+            repos_dic.append(rep)
         return repos_dic
             
 
@@ -2594,7 +2612,6 @@ class AddServerTab(QWidget):
         # self.thread.start()
         
         # Do the job here and not in a thread 
-        self.hide()
         self.is_in_progress(('AddServer', True))
         jobs_id = []
             
@@ -2609,12 +2626,12 @@ class AddServerTab(QWidget):
             dicom_file = dicom
             sub = item[1]
             ses = item[2]
-    
+                
             try:
                 args = [dicom_file]
                 if self.iso:
                     args.append('-iso')
-                job_id = submit_job(self.bids.root_dir, sub, ses, self.job_json, args, use_asyncssh=True, passphrase=passphrase)
+                job_id = submit_job(self.bids.root_dir, sub, ses, self.job_json, args, use_asyncssh=True, passphrase=passphrase, check_if_exist=False)
                 # job_id = ['Submitted batch job 2447621']
                 if job_id is not None and job_id != []:
                     jobs_id.append(*job_id)
@@ -2626,7 +2643,7 @@ class AddServerTab(QWidget):
         self.submitted_jobs(jobs_id)
     
     def is_in_progress(self, in_progress):
-        self.parent.parent.work_in_progress.update_work_in_progress(in_progress)
+        self.parent.parent.parent.work_in_progress.update_work_in_progress(in_progress)
         
     
     def error_handler(self, exception):
