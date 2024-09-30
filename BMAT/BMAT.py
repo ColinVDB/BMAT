@@ -36,7 +36,8 @@ from PyQt5.QtCore import (QSize,
                           pyqtProperty, 
                           QObject, 
                           QTextCodec, 
-                          QUrl)
+                          QUrl, 
+                          QMetaObject)
 from PyQt5.QtWidgets import (QDesktopWidget,
                              QApplication,
                              QWidget,
@@ -108,6 +109,130 @@ from submit_job_sss import submit_job
 # from my_logging import setup_logging
 
 # faulthandler.enable()
+from pkg_resources import get_distribution, DistributionNotFound
+import importlib.util
+try:
+    from importlib.metadata import version  # Python 3.8+
+except ImportError:
+    from importlib_metadata import version  # For earlier versions with the backport
+
+
+def is_compiled():
+    return getattr(sys, 'frozen', False)
+
+
+def get_executable_path():
+    if is_compiled():
+        # The application is frozen (compiled)
+        return os.path.dirname(sys.executable)  # Path to the executable
+    else:
+        # The application is not compiled, return the script path
+        return os.path.dirname(os.path.abspath(__file__))
+
+    
+# def is_package_installed(package_name, version=None):
+#     """
+#     Check if a package is installed, and optionally if a specific version is installed.
+
+#     :param package_name: Name of the package to check
+#     :param version: Specific version to check for (e.g., '1.0.0')
+#     :return: True if the package (and version) is installed, False otherwise
+#     """
+#     print(f'{package_name=}')
+#     print(f'{version=}')
+#     try:
+#         dist = get_distribution(package_name)
+#         print(f'{dist=}')
+#         if version:
+#             print('check version')
+#             return dist.version == version
+#         else:
+#             return True
+#     except DistributionNotFound:
+#         return False
+
+def is_package_installed(package_name, version=None):
+    """
+    Check if a package is installed, and optionally if a specific version is installed.
+
+    :param package_name: Name of the package to check
+    :param version: Specific version to check for (e.g., '1.0.0')
+    :return: True if the package (and version) is installed, False otherwise
+    """
+    try:
+        spec = importlib.util.find_spec(package_name)
+        if spec is None:
+            print(f'Package {package_name} is not installed.')
+            return False
+        
+        print(f'Package {package_name} is installed.')
+        if version:
+            print('checking version')
+            try:
+                installed_version = version(package_name)
+                return installed_version == version_required
+            except:
+                return False
+        return True
+    except ModuleNotFoundError:
+        return False
+
+def install_package(package_name, version=None, target_dir=None):
+    """
+    Install a package using pip.
+
+    :param package_name: Name of the package to install
+    :param version: Specific version to install (e.g., '1.0.0')
+    :param target_dir: Directory to install the package to (if specified)
+    """
+    if version:
+        package_str = f"{package_name}=={version}"
+    else:
+        package_str = package_name
+
+    if target_dir:
+        subprocess.Popen(f"pip install {package_str} --target {target_dir}", shell=True).wait()
+        # subprocess.check_call([sys.executable, '-m', 'pip', 'install', package_str, '--target', target_dir])
+    else:
+        subprocess.Popen(f"pip install {package_str}", shell=True).wait()
+        # subprocess.check_call([sys.executable, '-m', 'pip', 'install', package_str])
+
+def install_requirements(requirements_path):
+    """
+    Install packages from a requirements file.
+
+    :param requirements_path: Path to the requirements.txt file
+    """
+    # Determine if the application is running in a compiled state
+    # is_compiled = getattr(sys, 'frozen', False)
+    target_dir = None
+    if is_compiled():
+        # Set the target directory for compiled applications
+        file_path = get_executable_path()
+        target_dir = pjoin(file_path, '_internal') # Adjust this path as needed
+        
+    print(f'{target_dir=}')
+
+    with open(requirements_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#'):
+                # Split the line into package name and version
+                print(f'{line=}')
+                if '==' in line:
+                    package_name, version = line.split('==')
+                    version = version.strip()
+                else:
+                    package_name = line
+                    version = None
+                print(f'{package_name=}')
+                print(f'{version=}')
+                # Check if the package is already installed
+                if not is_package_installed(package_name, version):
+                    print(f"Installing {package_name}=={version}...")
+                    install_package(package_name, version, target_dir)
+                else:
+                    print(f"{package_name}=={version} is already installed.")
 
 
 # =============================================================================
@@ -138,28 +263,57 @@ class MainWindow(QMainWindow):
         except FileNotFoundError:
             memory_df = {}
         self.system = platform.system()
+        
+        print(f'Is the application compiled ? {is_compiled()}')
+        
+        print(os.getcwd())
 
         self.pipelines = {}
         self.pipelines_name = []
-        self.bmat_path = __file__.replace('BMAT.py', '')
-
-        for root, dirs, _ in os.walk('Pipelines'):
-            for d in dirs:
-                if d == 'src':
-                    for file in os.listdir(pjoin(root,d)):
-                        if os.path.isfile(pjoin(root, d, file)):
-                            if '.json' in file:
-                                import_r = pjoin(root, d).replace(os.sep,'.')
-                                f = open(pjoin(root, d, file))
-                                jsn = json.load(f)
-                                if jsn.get('name') == None or jsn.get('source_code') == None or jsn.get('import_name') == None or jsn.get('attr') == None:
-                                    continue
-                                self.pipelines_name.append(jsn.get('name'))
-                                import_name = jsn.get('import_name')
-                                attr = jsn.get('attr')
-                                self.pipelines[jsn.get('name')] = jsn
-                                self.pipelines[jsn.get('name')]['import'] = __import__(f'{import_r}.{import_name}', globals(), locals(), [attr], 0)
-                                f.close()
+        self.bmat_path = get_executable_path()
+        print(self.bmat_path)
+        
+        if os.path.isdir(self.bmat_path):
+            sys.path.append(pjoin(self.bmat_path))
+        
+        # if os.path.isdir('Pipelines'):
+        #     for root, dirs, _ in os.walk('Pipelines'):
+        #         for d in dirs:
+        #             if d == 'src':
+        #                 for file in os.listdir(pjoin(root,d)):
+        #                     if os.path.isfile(pjoin(root, d, file)):
+        #                         if '.json' in file:
+        #                             import_r = pjoin(root, d).replace(os.sep,'.')
+        #                             f = open(pjoin(root, d, file))
+        #                             jsn = json.load(f)
+        #                             if jsn.get('name') == None or jsn.get('source_code') == None or jsn.get('import_name') == None or jsn.get('attr') == None:
+        #                                 continue
+        #                             self.pipelines_name.append(jsn.get('name'))
+        #                             import_name = jsn.get('import_name')
+        #                             attr = jsn.get('attr')
+        #                             self.pipelines[jsn.get('name')] = jsn
+        #                             self.pipelines[jsn.get('name')]['import'] = __import__(f'{import_r}.{import_name}', globals(), locals(), [attr], 0)
+        #                             f.close()
+        if os.path.isdir(pjoin(self.bmat_path, 'Pipelines')):
+            for dirs in os.listdir(pjoin(self.bmat_path, 'Pipelines')):
+                if os.path.isdir(pjoin(self.bmat_path, 'Pipelines', dirs)):
+                    for d in os.listdir(pjoin(self.bmat_path, 'Pipelines', dirs)):
+                        if d == 'src':
+                            for file in os.listdir(pjoin(self.bmat_path, 'Pipelines', dirs, d)):
+                                if os.path.isfile(pjoin(self.bmat_path, 'Pipelines', dirs, d, file)):
+                                    if '.json' in file:
+                                        f = open(pjoin(self.bmat_path, 'Pipelines', dirs, d, file))
+                                        jsn = json.load(f)
+                                        if jsn.get('name') == None or jsn.get('source_code') == None or jsn.get('import_name') == None or jsn.get('attr') == None:
+                                            continue
+                                        self.pipelines_name.append(jsn.get('name'))
+                                        import_name = jsn.get('import_name')
+                                        attr = jsn.get('attr')
+                                        self.pipelines[jsn.get('name')] = jsn
+                                        if os.path.isdir(pjoin(self.bmat_path, 'Pipelines', dirs, d)):
+                                            sys.path.append(pjoin(self.bmat_path, 'Pipelines', dirs, d))
+                                        self.pipelines[jsn.get('name')]['import'] = __import__(f'Pipelines.{dirs}.{d}.{import_name}', globals(), locals(), [attr], 0)
+                                        f.close()
 
         self.local_pipelines = {}
         self.local_pipelines_name = []
@@ -169,7 +323,6 @@ class MainWindow(QMainWindow):
                 if os.path.isdir(pjoin(self.bmat_path, 'LocalPipelines', dirs)):
                     for file in os.listdir(pjoin(self.bmat_path, 'LocalPipelines', dirs)):
                         if '.json' in file:
-                            import_r = pjoin(self.bmat_path, 'LocalPipelines', dirs).replace(os.sep,'.')
                             f = open(pjoin(self.bmat_path, 'LocalPipelines', dirs, file))
                             jsn = json.load(f)
                             if jsn.get('name') == None or jsn.get('source_code') == None or jsn.get('import_name') == None or jsn.get('attr') == None:
@@ -178,7 +331,7 @@ class MainWindow(QMainWindow):
                             import_name = jsn.get('import_name')
                             attr = jsn.get('attr')
                             self.local_pipelines[jsn.get('name')] = jsn
-                            self.local_pipelines[jsn.get('name')]['import'] = __import__(f'{import_r}.{import_name}', globals(), locals(), [attr], 0)
+                            self.local_pipelines[jsn.get('name')]['import'] = __import__(f'LocalPipelines.{dirs}.{import_name}', globals(), locals(), [attr], 0)
                             f.close()
 
         # Create menu bar and add action
@@ -480,21 +633,26 @@ class MainWindow(QMainWindow):
         self.pipelines = {}
         self.pipelines_name = []
 
-        for root, dirs, _ in os.walk('Pipelines'):
-            for d in dirs:
-                if d == 'src':
-                    for r, ds, files in os.walk(pjoin(root,d)):
-                        for file in files:
-                            if '.json' in file:
-                                import_r = r.replace(os.sep,'.')
-                                f = open(pjoin(r,file))
-                                jsn = json.load(f)
-                                self.pipelines_name.append(jsn.get('name'))
-                                import_name = jsn.get('import_name')
-                                attr = jsn.get('attr')
-                                self.pipelines[jsn.get('name')] = jsn
-                                self.pipelines[jsn.get('name')]['import'] = __import__(f'{import_r}.{import_name}', globals(), locals(), [attr], 0)
-                                f.close()
+        if os.path.isdir(pjoin(self.bmat_path, 'Pipelines')):
+            for dirs in os.listdir(pjoin(self.bmat_path, 'Pipelines')):
+                if os.path.isdir(pjoin(self.bmat_path, 'Pipelines', dirs)):
+                    for d in os.listdir(pjoin(self.bmat_path, 'Pipelines', dirs)):
+                        if d == 'src':
+                            for file in os.listdir(pjoin(self.bmat_path, 'Pipelines', dirs, d)):
+                                if os.path.isfile(pjoin(self.bmat_path, 'Pipelines', dirs, d, file)):
+                                    if '.json' in file:
+                                        f = open(pjoin(self.bmat_path, 'Pipelines', dirs, d, file))
+                                        jsn = json.load(f)
+                                        if jsn.get('name') == None or jsn.get('source_code') == None or jsn.get('import_name') == None or jsn.get('attr') == None:
+                                            continue
+                                        self.pipelines_name.append(jsn.get('name'))
+                                        import_name = jsn.get('import_name')
+                                        attr = jsn.get('attr')
+                                        self.pipelines[jsn.get('name')] = jsn
+                                        if os.path.isdir(pjoin(self.bmat_path, 'Pipelines', dirs, d)):
+                                            sys.path.append(pjoin(self.bmat_path, 'Pipelines', dirs, d))
+                                        self.pipelines[jsn.get('name')]['import'] = __import__(f'Pipelines.{dirs}.{d}.{import_name}', globals(), locals(), [attr], 0)
+                                        f.close()
         
         # self.PipelinesMenu.deleteLater()
                                 
@@ -531,7 +689,7 @@ class MainWindow(QMainWindow):
     def create_bids_directory(self):
         logging.info("update_bids!")
 
-        bids_dir = str(QFileDialog.getExistingDirectory(self, "Create new BIDS Directory"), options=QFileDialog.DontUseNativeDialog)
+        bids_dir = str(QFileDialog.getExistingDirectory(self, "Create new BIDS Directory", options=QFileDialog.DontUseNativeDialog))
         if os.path.isdir(bids_dir):
             self.bids_dir = bids_dir
             self.bids = BIDSHandler(root_dir=self.bids_dir)
@@ -547,6 +705,7 @@ class MainWindow(QMainWindow):
             self.bids_actions.update_bids(self)
 
             self.viewer = DefaultViewer(self)
+            # self.work_in_progress = WorkInProgress(self)
 
             self.layout.deleteLater()
             self.window.deleteLater()
@@ -557,6 +716,7 @@ class MainWindow(QMainWindow):
             self.layout.addWidget(self.bids_metadata, 1, 1)
             self.layout.addWidget(self.bids_actions, 1, 2)
             self.layout.addWidget(self.viewer, 2, 1, 1, 2)
+            self.layout.addWidget(self.work_in_progress, 3, 1, 1, 2)
             self.window = QWidget(self)
             self.setCentralWidget(self.window)
             self.window.setLayout(self.layout)
@@ -575,7 +735,7 @@ class MainWindow(QMainWindow):
         """
         logging.info("update_bids!")
 
-        bids_dir = str(QFileDialog.getExistingDirectory(self, "Select BIDS Directory"), options=QFileDialog.DontUseNativeDialog)
+        bids_dir = str(QFileDialog.getExistingDirectory(self, "Select BIDS Directory", options=QFileDialog.DontUseNativeDialog))
         if os.path.isdir(bids_dir):
             self.bids_dir = bids_dir
             self.bids = BIDSHandler(root_dir=self.bids_dir)
@@ -601,6 +761,7 @@ class MainWindow(QMainWindow):
             self.layout.addWidget(self.bids_metadata, 1, 1)
             self.layout.addWidget(self.bids_actions, 1, 2)
             self.layout.addWidget(self.viewer, 2, 1, 1, 2)
+            self.layout.addWidget(self.work_in_progress, 3, 1, 1, 2)
             self.window = QWidget(self)
             self.setCentralWidget(self.window)
             self.window.setLayout(self.layout)
@@ -1345,16 +1506,23 @@ class WorkInProgress(QWidget):
         layout.addWidget(self.working_lab)
         layout.addWidget(self.working_details_lab)
         self.setLayout(layout)
-        
-    def update_work_in_progress(self,in_progress):
+    
+    @pyqtSlot(tuple)
+    def update_work_in_progress(self, in_progress):
         if in_progress[1]:
             self.working_details.append(in_progress[0])
         else:
             self.working_details.remove(in_progress[0])
-        self.update_animation()
+        # self.update_animation()
+        QMetaObject.invokeMethod(self, "update_animation", Qt.QueuedConnection)
     
     
+    @pyqtSlot()
     def update_animation(self):
+        if not self.working_lab:
+            print('working label does not exists')
+            return
+        
         if self.working_details == []:
             self.working_gif.stop()
             self.working_lab.clear()
@@ -1918,8 +2086,8 @@ class BidsActions(QWidget):
         class ActionDialog(QDialog):
             def __init__(self, parent=None):
                 super().__init__(parent)
-                self.parent = parent
-                self.bids = self.parent.bids
+                # self.parent = parent
+                # self.bids = self.parent.bids
                 self.initUI()
                 
             def initUI(self):
@@ -1943,32 +2111,67 @@ class BidsActions(QWidget):
                 
             def performLocally(self):
                 print('Performing action locally...')
+                self.result = 'locally'
+                self.accept()
                 
-                logging.info("add")
+                # logging.info("add")
+                # if hasattr(self, 'add_win'):
+                #     del self.add_win
+                # print('test')
+                # self.add_win = AddWindow(self.parent)
+                # print('creation of the add window')
+                # if not self.parent.parent.dcm2niix_path:
+                #     print('no dcm2niix path')
+                #     # ajouter une fenetre
+                #     path = QFileDialog.getOpenFileName(self, "Select 'dcm2niix.exe' path", options=QFileDialog.DontUseNativeDialog)[0]
+                #     self.parent.parent.dcm2niix_path = path
+                #     # self.parent.memory['dcm2niix_path'] = path
+                #     self.bids.setDicom2niixPath(self.parent.parent.dcm2niix_path)
+                # self.add_win.show()
+                # print('show window')
+                # self.close()
+                # print('hide qfiledialog')
+                
+            def performOnRemote(self):
+                print('Performing action on remote server...')
+                self.result = 'remote'
+                self.accept()
+                
+                # logging.info("add")
+                # if hasattr(self, 'add_win_server'):
+                #     del self.add_win_server
+                # self.add_win_server = AddServerWindow(self.parent)
+                # self.add_win_server.show()
+                # self.hide()
+                
+        dialog = ActionDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            result = dialog.result
+            print(result)
+            
+            if result == 'locally':
                 if hasattr(self, 'add_win'):
                     del self.add_win
                 self.add_win = AddWindow(self)
                 if not self.parent.dcm2niix_path:
+                    print('no dcm2niix path')
                     # ajouter une fenetre
                     path = QFileDialog.getOpenFileName(self, "Select 'dcm2niix.exe' path", options=QFileDialog.DontUseNativeDialog)[0]
                     self.parent.dcm2niix_path = path
                     # self.parent.memory['dcm2niix_path'] = path
-                    self.bids.setDicom2niixPath(self.parent.dcm2niix_path)
+                    self.bids.setDicom2niixPath(self.parent.parent.dcm2niix_path)
                 self.add_win.show()
-                self.hide()
-                
-            def performOnRemote(self):
-                print('Performing action on remote server...')
-                
-                logging.info("add")
+                print('show window')
+                # self.hide()
+                print('hide qdialog')
+            
+            elif result == 'remote':
+                print("add")
                 if hasattr(self, 'add_win_server'):
                     del self.add_win_server
-                self.add_win_server = AddServerWindow(self)
+                self.add_win_server = AddServerWindow(self.parent)
                 self.add_win_server.show()
-                self.hide()
-                
-        dialog = ActionDialog(self.parent)
-        dialog.exec_()
+                # self.hide()
 
 
     def remove(self):
@@ -2377,6 +2580,7 @@ class AddWindow(QMainWindow):
         self.thread.started.connect(self.worker.run)
         self.worker.in_progress.connect(self.is_in_progress)
         self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.cleanup_thread)
         self.worker.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
         self.thread.finished.connect(lambda: self.end_add())
@@ -2387,6 +2591,22 @@ class AddWindow(QMainWindow):
     
     def is_in_progress(self, in_progress):
         self.parent.parent.work_in_progress.update_work_in_progress(in_progress)
+        
+    @pyqtSlot()
+    def cleanup_thread(self):
+        # Wait for the thread to finish
+        self.thread.wait()
+
+    def closeEvent(self, event):
+        # Ensure the thread is properly shut down before the widget is closed
+        if hasattr(self, 'thread'):
+            print('self has thread attr')
+            try:
+                self.thread.quit()
+                self.thread.wait()
+            except AttributeError:
+                print('[Warning] attribute error')
+        event.accept()  # Accept the close event
     
 
     def end_add(self):
@@ -2448,7 +2668,7 @@ class AddServerWindow(QMainWindow):
         self.center()
         
         # get job_info
-        path = os.path.dirname(os.path.abspath(__file__))
+        path = get_executable_path()
         if not pexists(pjoin(path, 'dcm2bids_sss.json')):
             print('[ERROR] dcm2bids_sss.json file not found')
         
@@ -2631,7 +2851,7 @@ class AddServerTab(QWidget):
                 args = [dicom_file]
                 if self.iso:
                     args.append('-iso')
-                job_id = submit_job(self.bids.root_dir, sub, ses, self.job_json, args, use_asyncssh=True, passphrase=passphrase, check_if_exist=False)
+                job_id = submit_job(self.bids.root_dir, sub, ses, self.job_json, args=args, use_asyncssh=True, passphrase=passphrase, check_if_exist=False)
                 # job_id = ['Submitted batch job 2447621']
                 if job_id is not None and job_id != []:
                     jobs_id.append(*job_id)
@@ -2643,7 +2863,7 @@ class AddServerTab(QWidget):
         self.submitted_jobs(jobs_id)
     
     def is_in_progress(self, in_progress):
-        self.parent.parent.parent.work_in_progress.update_work_in_progress(in_progress)
+        self.parent.parent.work_in_progress.update_work_in_progress(in_progress)
         
     
     def error_handler(self, exception):
@@ -2799,13 +3019,13 @@ class Rename(QMainWindow):
         self.tab1 = RenameSubject(self)
 
         # Tab 2
-        self.tab2 = RenameSession(self)
+        # self.tab2 = RenameSession(self)
 
         # Tab 3
         self.tab3 = RenameSequence(self)
 
         self.tabs.addTab(self.tab1, "Subject")
-        self.tabs.addTab(self.tab2, "Session")
+        # self.tabs.addTab(self.tab2, "Session")
         self.tabs.addTab(self.tab3, "Sequence")
 
         # self.registration = TransformationTab(self)
@@ -2867,15 +3087,21 @@ class RenameSubject(QMainWindow):
 
         self.old_sub = QLineEdit(self)
         self.old_sub.setPlaceholderText("Old Subject ID")
+        self.old_ses = QLineEdit(self)
+        self.old_ses.setPlaceholderText("Old Session ID")
         self.new_sub = QLineEdit(self)
         self.new_sub.setPlaceholderText("New Subject ID")
+        self.new_ses = QLineEdit(self)
+        self.new_ses.setPlaceholderText("New Session ID")
         self.rename_button = QPushButton("Rename Subject")
         self.rename_button.clicked.connect(self.rename)
 
         layout = QGridLayout()
         layout.addWidget(self.old_sub, 0, 0, 1, 1)
         layout.addWidget(self.new_sub, 0, 1, 1, 1)
-        layout.addWidget(self.rename_button, 1, 0, 1, 2)
+        layout.addWidget(self.old_ses, 1, 0, 1, 1)
+        layout.addWidget(self.new_ses, 1, 1, 1, 1)
+        layout.addWidget(self.rename_button, 2, 0, 1, 2)
 
         self.window.setLayout(layout)
 
@@ -2889,12 +3115,15 @@ class RenameSubject(QMainWindow):
         None.
 
         """
+        print('rename subject')
         old_sub = self.old_sub.text()
+        old_ses = self.old_ses.text()
         new_sub = self.new_sub.text()
+        new_ses = self.new_ses.text()
 
         self.parent.setEnabled(False)
         self.thread = QThread()
-        self.operation = OperationWorker(self.bids.rename_subject, args=[old_sub, new_sub])
+        self.operation = OperationWorker(self.bids.rename_subject, args=[old_sub, old_ses, new_sub, new_ses])
         self.operation.moveToThread(self.thread)
         self.thread.started.connect(self.operation.run)
         self.operation.in_progress.connect(self.is_in_progress)
@@ -2905,9 +3134,9 @@ class RenameSubject(QMainWindow):
         self.thread.finished.connect(
             lambda: self.parent.setEnabled(True)
         )
-        logging.info(f"sub-{old_sub} renamed to sub-{new_sub}")
+        print(f"sub-{old_sub} renamed to sub-{new_sub}")
 
-        self.hide()
+        self.parent.hide()
         
         
     def is_in_progress(self, in_progress):
@@ -3103,7 +3332,7 @@ class RenameSequence(QMainWindow):
         )
         logging.info(f"old {old_seq} renamed to new {new_seq}")
 
-        self.hide()
+        self.parent.hide()
         
         
     def is_in_progress(self, in_progress):
@@ -4903,7 +5132,8 @@ class AddPipelineWorker(QObject):
         
         if setup.get('python_requirements') != None and setup.get('python_requirements') != "":
             requirements_path = f'{pipeline_path}/{setup.get("python_requirements")}'
-            subprocess.Popen(f'pip install -r {requirements_path}', shell=True).wait()
+            # subprocess.Popen(f'pip install -r {requirements_path}', shell=True).wait()
+            install_requirements(requirements_path)
         
         self.in_progress.emit(('python requirements', False))
         
