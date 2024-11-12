@@ -234,6 +234,18 @@ def install_requirements(requirements_path):
                 else:
                     print(f"{package_name}=={version} is already installed.")
 
+def get_server_info():
+    
+    bmat_path = os.path.dirname(os.path.abspath(__file__))
+    
+    server_info = None
+    with open(pjoin(bmat_path, 'server_info.json'), 'r') as f:
+        server_info = json.load(f)
+        
+    if server_info == None:
+        print('[ERROR] while loading server_info.json file')
+    
+    return server_info
 
 # =============================================================================
 # MainWindow
@@ -261,7 +273,7 @@ class MainWindow(QMainWindow):
             for key in self.memory.keys():
                 self.memory[key] = self.memory[key][0]
         except FileNotFoundError:
-            memory_df = {}
+            memory_df = {'dcm2niix_path':None, 'itksnap':None}
         self.system = platform.system()
         
         print(f'Is the application compiled ? {is_compiled()}')
@@ -336,8 +348,13 @@ class MainWindow(QMainWindow):
 
         # Create menu bar and add action
         self.menu_bar = self.menuBar()
+        self.bmat_menu = self.menu_bar.addMenu('&BMAT')
+        
+        preferences = QAction('&Preferences', self)
+        preferences.triggered.connect(self.preferences)
+        self.bmat_menu.addAction(preferences)
+        
         self.bids_menu = self.menu_bar.addMenu('&BIDS')
-
         create_bids = QAction('&Create BIDS directory', self)
         create_bids.triggered.connect(self.create_bids_directory)
         self.bids_menu.addAction(create_bids)
@@ -435,8 +452,6 @@ class MainWindow(QMainWindow):
             
         # else:
 
-        self.dcm2niix_path = 'dcm2niix'
-
         self.bids = BIDSHandler(root_dir=self.bids_dir)
         bids_dir_split = self.bids_dir.split('/')
         self.bids_name_dir = bids_dir_split[len(bids_dir_split)-1]
@@ -452,6 +467,14 @@ class MainWindow(QMainWindow):
         self.bids_metadata = BidsMetadata(self)
 
         self.bids_actions = BidsActions(self)
+        
+        print('memory dcm2niix', self.memory.get('dcm2niix_path'))
+        if self.memory.get('dcm2niix_path') != None and self.memory.get('dcm2niix_path') != '' and pexists(self.memory.get('dcm2niix_path')):
+            print('memory dcm2niix', self.memory.get('dcm2niix_path'))
+            self.dcm2niix_path = self.memory.get('dcm2niix_path')
+            self.bids.setDicom2niixPath(self.dcm2niix_path)
+        else:
+            self.dcm2niix_path = None
 
         # setup_logging(self.__class__.__name__)
 
@@ -609,6 +632,14 @@ class MainWindow(QMainWindow):
         self.window.setLayout(self.layout)
 
     
+    def preferences(self):
+        
+        if hasattr(self, 'preferences_win'):
+            self.preferences_win.deleteLater()
+            del self.preferences_win
+        
+        self.preferences_win = PreferencesWindow(self, self.memory)
+        self.preferences_win.exec_()
 
     def launch_pipeline(self, pipe):
         """
@@ -807,7 +838,92 @@ class MainWindow(QMainWindow):
         
     def launch_bids_apps(self):
         pass
+        
+        
+class PreferencesWindow(QDialog):
+    """
+    """
+    
+    def __init__(self, parent, memory):
+        super().__init__()
+        self.setWindowTitle("Preferences")
+        self.resize(800, 500)
+        self.parent = parent
+        self.memory = memory
 
+        # Main layout
+        main_layout = QVBoxLayout()
+
+        # Create a scrollable area in case there are many keys
+        scroll_area = QScrollArea()
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout()
+
+        # Create one row for each key in the dictionary
+        self.key_widgets = {}  # Dictionary to store widgets for easy access
+        for key, value in self.memory.items():
+            # Create widgets for each key
+            row_layout = QHBoxLayout()
+            label = QLabel(key)
+            line_edit = QLineEdit()
+            line_edit.setPlaceholderText(value)
+            browse_button = QPushButton("Browse")
+
+            # Store QLineEdit in the dictionary
+            self.key_widgets[key] = line_edit
+
+            # Connect the browse button to a file dialog function
+            browse_button.clicked.connect(lambda checked, k=key: self.browse_file(k))
+
+            # Add widgets to row layout
+            row_layout.addWidget(label)
+            row_layout.addWidget(line_edit)
+            row_layout.addWidget(browse_button)
+
+            # Add row layout to the main layout
+            scroll_layout.addLayout(row_layout)
+
+        scroll_widget.setLayout(scroll_layout)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(scroll_widget)
+
+        # Add scroll area to the main layout
+        main_layout.addWidget(scroll_area)
+
+        # Add Apply and Quit buttons at the bottom
+        button_layout = QHBoxLayout()
+        apply_button = QPushButton("Apply")
+        quit_button = QPushButton("Quit")
+
+        # Connect buttons to their functions
+        apply_button.clicked.connect(self.apply_changes)
+        quit_button.clicked.connect(self.close)
+
+        button_layout.addWidget(apply_button)
+        button_layout.addWidget(quit_button)
+
+        # Add the button layout to the main layout
+        main_layout.addLayout(button_layout)
+        self.setLayout(main_layout)
+
+    def browse_file(self, key):
+        # Open a file dialog to select a file
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Application Path", options=QFileDialog.DontUseNativeDialog)
+        if file_path:
+            # Update the QLineEdit placeholder text with the selected file path
+            self.key_widgets[key].setPlaceholderText(file_path)
+
+    def apply_changes(self):
+        # Update the data dictionary with values from QLineEdits
+        for key, line_edit in self.key_widgets.items():
+            text = line_edit.text()
+            if text:  # Only update if there is a new text entered
+                self.memory[key] = text
+            else:
+                self.memory[key] = line_edit.placeholderText()
+        # Optionally, save the updated data back to the file here
+        print("Preferences updated.")
+    
 
 
 # =============================================================================
@@ -2143,35 +2259,88 @@ class BidsActions(QWidget):
                 # self.add_win_server = AddServerWindow(self.parent)
                 # self.add_win_server.show()
                 # self.hide()
-                
-        dialog = ActionDialog(self)
-        if dialog.exec_() == QDialog.Accepted:
-            result = dialog.result
-            print(result)
-            
-            if result == 'locally':
-                if hasattr(self, 'add_win'):
-                    del self.add_win
-                self.add_win = AddWindow(self)
-                if not self.parent.dcm2niix_path:
-                    print('no dcm2niix path')
-                    # ajouter une fenetre
-                    path = QFileDialog.getOpenFileName(self, "Select 'dcm2niix.exe' path", options=QFileDialog.DontUseNativeDialog)[0]
-                    self.parent.dcm2niix_path = path
+        
+        # check if server info completed in json
+        server_info = get_server_info()
+        if server_info == None:
+            print('server_info == None')
+            if hasattr(self, 'add_win'):
+                del self.add_win
+            self.add_win = AddWindow(self)
+            if not self.parent.memory.get('dcm2niix_path'):
+                print('no dcm2niix path')
+                # ajouter une fenetre
+                path = QFileDialog.getOpenFileName(self, "Select 'dcm2niix.exe' path", options=QFileDialog.DontUseNativeDialog)[0]
+                if path != None and path != '' and pexists(path):
+                    self.parent.memory['dcm2niix_path'] = path
                     # self.parent.memory['dcm2niix_path'] = path
-                    self.bids.setDicom2niixPath(self.parent.parent.dcm2niix_path)
-                self.add_win.show()
-                print('show window')
-                # self.hide()
-                print('hide qdialog')
-            
-            elif result == 'remote':
-                print("add")
-                if hasattr(self, 'add_win_server'):
-                    del self.add_win_server
-                self.add_win_server = AddServerWindow(self.parent)
-                self.add_win_server.show()
-                # self.hide()
+                    self.bids.setDicom2niixPath(self.parent.memory.get('dcm2niix_path'))
+                    self.parent.memory['dcm2niix_path'] = path
+            self.add_win.show()
+            print('show window')
+        elif server_info.get('server') == None or server_info.get('server') == "":
+            print('server_info.get(server) == None')
+            if hasattr(self, 'add_win'):
+                del self.add_win
+            self.add_win = AddWindow(self)
+            if not self.parent.memory.get('dcm2niix_path'):
+                print('no dcm2niix path')
+                # ajouter une fenetre
+                path = QFileDialog.getOpenFileName(self, "Select 'dcm2niix.exe' path", options=QFileDialog.DontUseNativeDialog)[0]
+                if path != None and path != '' and pexists(path):
+                    self.parent.memory['dcm2niix_path'] = path
+                    # self.parent.memory['dcm2niix_path'] = path
+                    self.bids.setDicom2niixPath(self.parent.memory.get('dcm2niix_path'))
+                    self.parent.memory['dcm2niix_path'] = path
+            self.add_win.show()
+            print('show window')
+        elif server_info.get('server').get('host') == None or server_info.get('server').get('host') == "":
+            print('server_info.get(server).get(host) == None')
+            if hasattr(self, 'add_win'):
+                del self.add_win
+            self.add_win = AddWindow(self)
+            if not self.parent.memory.get('dcm2niix_path'):
+                print('no dcm2niix path')
+                # ajouter une fenetre
+                path = QFileDialog.getOpenFileName(self, "Select 'dcm2niix.exe' path", options=QFileDialog.DontUseNativeDialog)[0]
+                if path != None and path != '' and pexists(path):
+                    self.parent.memory['dcm2niix_path'] = path
+                    # self.parent.memory['dcm2niix_path'] = path
+                    self.bids.setDicom2niixPath(self.parent.memory.get('dcm2niix_path'))
+                    self.parent.memory['dcm2niix_path'] = path
+            self.add_win.show()
+            print('show window')
+        else:        
+            dialog = ActionDialog(self)
+            if dialog.exec_() == QDialog.Accepted:
+                result = dialog.result
+                print(result)
+                
+                if result == 'locally':
+                    if hasattr(self, 'add_win'):
+                        del self.add_win
+                    self.add_win = AddWindow(self)
+                    if not self.parent.memory.get('dcm2niix_path'):
+                        print('no dcm2niix path')
+                        # ajouter une fenetre
+                        path = QFileDialog.getOpenFileName(self, "Select 'dcm2niix.exe' path", options=QFileDialog.DontUseNativeDialog)[0]
+                        if path != None and path != '' and pexists(path):
+                            self.parent.memory['dcm2niix_path'] = path
+                            # self.parent.memory['dcm2niix_path'] = path
+                            self.bids.setDicom2niixPath(self.parent.memory.get('dcm2niix_path'))
+                            self.parent.memory['dcm2niix_path'] = path
+                    self.add_win.show()
+                    print('show window')
+                    # self.hide()
+                    print('hide qdialog')
+                
+                elif result == 'remote':
+                    print("add")
+                    if hasattr(self, 'add_win_server'):
+                        del self.add_win_server
+                    self.add_win_server = AddServerWindow(self.parent)
+                    self.add_win_server.show()
+                    # self.hide()
 
 
     def remove(self):
@@ -2803,6 +2972,8 @@ class AddServerTab(QWidget):
         None.
 
         """
+        self.job_json["slurm_infos"] = self.parent.job_tab.get_slurm_job_info()
+        
         def getPassword():
             password, ok = QInputDialog.getText(self, "SSH Key Passphrase", "Unlocking SSH key with passphrase?", 
                                     QLineEdit.Password)

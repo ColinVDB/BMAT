@@ -77,6 +77,7 @@ class BIDSHandler:
         # setup_logging('dicom2bids')
         self.logger = logging.getLogger('dicom2bids')
         self.logger.setLevel(logging.DEBUG)
+        self.dcm2niix_path = None
         
         if sequences_csv == None:
             dir_path = os.path.dirname(os.path.abspath(__file__))
@@ -124,7 +125,11 @@ class BIDSHandler:
         None.
 
         """
-        self.dicom2niix_path = dcm2niix_path
+        if dcm2niix_path == '' or dcm2niix_path == None or dcm2niix_path == 'use_docker':
+            print('dcm2niix_path does not exist')
+            return
+        else:
+            self.dicom2niix_path = dcm2niix_path
         
         
     def update_number_of_subjects(self, logger=logging):
@@ -294,8 +299,12 @@ class BIDSHandler:
                 #                   "-p", "y", "-z", "y", '-o', directory, path])
                 # subprocess.Popen(f'docker run --rm -v "{path}":/media -v "{directory}":/mnt xnat/dcm2niix dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /mnt /media', shell=True).wait()
                 # self.client.containers.run('xnat/dcm2niix', auto_remove=True, volumes={f'{path}':{'bind':'/media', 'mode':'ro'}, f'{directory}':{'bind':'/mnt', 'mode':'rw'}}, command=['dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /mnt /media'])
-                subprocess.Popen(f'dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o {directory} {path}', shell=True).wait()
-                # subprocess.Popen(f'docker run --rm --privileged -v "{directory}":/home -v "{path}":/media colinvdb/bmat-dcm2niix dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /home /media', shell=True).wait()
+                # subprocess.Popen(f'dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o {directory} {path}', shell=True).wait()
+                if self.dcm2niix_path:
+                    subprocess.Popen(f'{self.dcm2niix_path} -f \"%d_%p_%t_%s\" -p y -z y -o {directory} {path}', shell=True).wait()
+                else:
+                    print('Use docker for conversion')
+                    subprocess.Popen(f'docker run --rm --privileged -v "{directory}":/home -v "{path}":/media colinvdb/bmat-dcm2niix dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /home /media', shell=True).wait()
                 
         for _,_,files in os.walk(directory):
             for file in files:
@@ -1499,7 +1508,9 @@ class BIDSHandler:
                     if new_sub == '' and new_ses == '':
                         for i in sub_df.index:
                             participants_df.drop(i, inplace=True)
-                participants_df.to_csv(pjoin(self.root_dir, "participants.tsv"), index=False, sep='\t')
+                f.seek(0)
+                participants_df.to_csv(f, index=False, sep='\t')
+                f.truncate()
             except Exception as e:
                 print('[ERROR] {e}')
                 return
