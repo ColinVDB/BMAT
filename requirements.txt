@@ -29,8 +29,6 @@ packaging==23.2
 pandas==1.5.3
 paramiko==3.4.0
 path==16.6.0
-pathlib==1.0.1
-pathlib2==2.3.7
 pillow==10.2.0
 portalocker==2.10.0
 pycparser==2.21
