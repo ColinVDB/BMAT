@@ -473,7 +473,7 @@ class MainWindow(QMainWindow):
         self.bids_actions = BidsActions(self)
         
         print('memory dcm2niix', self.memory.get('dcm2niix_path'))
-        if self.memory.get('dcm2niix_path') != None and self.memory.get('dcm2niix_path') != '' and pexists(self.memory.get('dcm2niix_path')):
+        if self.memory.get('dcm2niix_path') != None and self.memory.get('dcm2niix_path') != '':
             print('memory dcm2niix', self.memory.get('dcm2niix_path'))
             self.dcm2niix_path = self.memory.get('dcm2niix_path')
             self.bids.setDicom2niixPath(self.dcm2niix_path)
