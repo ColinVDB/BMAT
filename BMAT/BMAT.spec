@@ -39,7 +39,8 @@ exe = EXE(
     bootloader_ignore_signals=False,  # Bootloader signal handling.
     strip=False,  # Strip debug symbols.
     upx=True,  # Compress the executable with UPX.
-    console=True  # Console application for Windows (False for windowed).
+    console=True,  # Console application for Windows (False for windowed).
+    icon='Pictures/bmat_icon.ico' # icon off application
 )
 
 coll = COLLECT(
