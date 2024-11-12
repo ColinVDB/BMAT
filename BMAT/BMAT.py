@@ -442,7 +442,7 @@ class MainWindow(QMainWindow):
 
         """
         self.setWindowTitle('BMAT')
-        self.setWindowIcon(QIcon(pjoin('Pictures', 'bids_icon.png')))
+        self.setWindowIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'bids_icon.png')))
         self.window = QWidget(self)
         self.setCentralWidget(self.window)
         self.window.closeEvent = self.closeEvent
@@ -1278,19 +1278,19 @@ class AddUpdatePipelineWindow(QMainWindow):
             
         self.window = QWidget()
         
-        self.git_working_gif = QMovie('Pictures/roll_load.gif')
+        self.git_working_gif = QMovie(pjoin(get_executable_path(), 'Pictures', 'roll_load.gif'))
         self.git_working_gif.setScaledSize(QSize(25,25))
         
-        self.python_working_gif = QMovie('Pictures/roll_load.gif')
+        self.python_working_gif = QMovie(pjoin(get_executable_path(), 'Pictures', 'roll_load.gif'))
         self.python_working_gif.setScaledSize(QSize(25,25))
         
-        self.docker_working_gif = QMovie('Pictures/roll_load.gif')
+        self.docker_working_gif = QMovie(pjoin(get_executable_path(), 'Pictures', 'roll_load.gif'))
         self.docker_working_gif.setScaledSize(QSize(25,25))
         
-        self.working_gif = QMovie('Pictures/roll_load.gif')
+        self.working_gif = QMovie(pjoin(get_executable_path(), 'Pictures', 'roll_load.gif'))
         self.working_gif.setScaledSize(QSize(25,25))
         
-        self.check_icon = QPixmap('Pictures/check.png')
+        self.check_icon = QPixmap(pjoin(get_executable_path(), 'Pictures', 'check.png'))
         self.check_icon = self.check_icon.scaled(QSize(20,20))
         
         git_lab = QLabel('Git')
@@ -1431,14 +1431,14 @@ class BIDSQualityControlWindow(QMainWindow):
         self.errors_label.setFont(QFont('Calibri', 15))
         self.errors_label.setStyleSheet("color:red")
         self.errors_details_button = QPushButton('Details')
-        self.errors_details_button.setIcon(QIcon(pjoin('Pictures', 'plus.png')))
+        self.errors_details_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'plus.png')))
         self.errors_details_button.clicked.connect(self.errors_details)
 
         self.warnings_label = QLabel(f'Your BIDS directory contains {len(self.warnings)} Warnings !')
         self.warnings_label.setFont(QFont('Calibri', 15))
         self.warnings_label.setStyleSheet("color:orange")
         self.warnings_details_button = QPushButton('Details')
-        self.warnings_details_button.setIcon(QIcon(pjoin('Pictures', 'plus.png')))
+        self.warnings_details_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'plus.png')))
         self.warnings_details_button.clicked.connect(self.warnings_details)
 
         self.layout = QGridLayout()
@@ -1467,11 +1467,11 @@ class BIDSQualityControlWindow(QMainWindow):
         self.warnings_label.setFont(QFont('Calibri', 15))
         self.warnings_label.setStyleSheet("color:orange")
         self.warnings_details_button = QPushButton('Details')
-        self.warnings_details_button.setIcon(QIcon(pjoin('Pictures', 'plus.png')))
+        self.warnings_details_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'plus.png')))
         self.warnings_details_button.clicked.connect(self.warnings_details)
 
         self.minus_errors_button = QPushButton()
-        self.minus_errors_button.setIcon(QIcon(pjoin('Pictures', 'minus.png')))
+        self.minus_errors_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'minus.png')))
         self.minus_errors_button.clicked.connect(self.init_ui)
 
         for error in self.errors:
@@ -1519,11 +1519,11 @@ class BIDSQualityControlWindow(QMainWindow):
         self.errors_label.setFont(QFont('Calibri', 15))
         self.errors_label.setStyleSheet("color:red")
         self.errors_details_button = QPushButton('Details')
-        self.errors_details_button.setIcon(QIcon(pjoin('Pictures', 'plus.png')))
+        self.errors_details_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'plus.png')))
         self.errors_details_button.clicked.connect(self.errors_details)
 
         self.minus_warnings_button = QPushButton()
-        self.minus_warnings_button.setIcon(QIcon(pjoin('Pictures', 'minus.png')))
+        self.minus_warnings_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'minus.png')))
         self.minus_warnings_button.clicked.connect(self.init_ui)
 
         for warning in self.warnings:
@@ -1611,7 +1611,7 @@ class WorkInProgress(QWidget):
         self.setMinimumSize(700, 50)
         
         self.working_lab = QLabel(self)
-        self.working_gif = QMovie('Pictures/loading_inf.gif')
+        self.working_gif = QMovie(pjoin(get_executable_path(), 'Pictures', 'loading_inf.gif'))
         self.working_gif.setScaledSize(QSize(40,40))
         # self.working_lab.setMovie(self.working_gif)
         # self.working_gif.start()
@@ -4568,15 +4568,15 @@ class Table_Viewer(QWidget):
         self.label.setMinimumWidth(500)
         self.label.setFont(QFont('Calibri', 15))
         self.edit_button = QPushButton('Edit')
-        self.edit_button.setIcon(QIcon(pjoin('Pictures', 'edit.png')))
+        self.edit_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'edit.png')))
         self.edit_button.adjustSize()
         self.edit_button.clicked.connect(self.edit)
         self.save_button = QPushButton('Save')
-        self.save_button.setIcon(QIcon(pjoin('Pictures', 'save.png')))
+        self.save_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'save.png')))
         self.save_button.adjustSize()
         self.save_button.clicked.connect(self.save)
         self.close_button = QPushButton('Close')
-        self.close_button.setIcon(QIcon(pjoin('Pictures', 'close.png')))
+        self.close_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'close.png')))
         self.close_button.adjustSize()
         self.close_button.clicked.connect(self.close)
 
@@ -4707,19 +4707,19 @@ class ParticipantsTSV_Viewer(QWidget):
         self.label.setMinimumWidth(500)
         self.label.setFont(QFont('Calibri', 15))
         self.edit_button = QPushButton('Edit')
-        self.edit_button.setIcon(QIcon(pjoin('Pictures', 'edit.png')))
+        self.edit_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'edit.png')))
         self.edit_button.adjustSize()
         self.edit_button.clicked.connect(self.edit)
         self.save_button = QPushButton('Save')
-        self.save_button.setIcon(QIcon(pjoin('Pictures', 'save.png')))
+        self.save_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'save.png')))
         self.save_button.adjustSize()
         self.save_button.clicked.connect(self.save)
         self.plus_button = QPushButton('Add')
-        self.plus_button.setIcon(QIcon(pjoin('Pictures', 'plus.png')))
+        self.plus_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'plus.png')))
         self.plus_button.adjustSize()
         self.plus_button.clicked.connect(self.add_item)
         self.close_button = QPushButton('Close')
-        self.close_button.setIcon(QIcon(pjoin('Pictures', 'close.png')))
+        self.close_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'close.png')))
         self.close_button.adjustSize()
         self.close_button.clicked.connect(self.close)
 
@@ -4965,15 +4965,15 @@ class TextViewer(QWidget):
         self.label.setMinimumWidth(500)
         self.label.setFont(QFont('Calibri', 15))
         self.edit_button = QPushButton('Edit')
-        self.edit_button.setIcon(QIcon(pjoin('Pictures', 'edit.png')))
+        self.edit_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'edit.png')))
         self.edit_button.adjustSize
         self.edit_button.clicked.connect(self.edit)
         self.save_button = QPushButton('Save')
-        self.save_button.setIcon(QIcon(pjoin('Pictures', 'save.png')))
+        self.save_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'save.png')))
         self.save_button.adjustSize
         self.save_button.clicked.connect(self.save)
         self.close_button = QPushButton('Close')
-        self.close_button.setIcon(QIcon(pjoin('Pictures', 'close.png')))
+        self.close_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'close.png')))
         self.close_button.adjustSize()
         self.close_button.clicked.connect(self.close)
 
@@ -5073,7 +5073,7 @@ class DefaultViewer(QWidget):
 
         image = QLabel(self)
         image.setAlignment(Qt.AlignCenter)
-        pixmap = QPixmap(pjoin('Pictures', 'bids_icon.png'))
+        pixmap = QPixmap(pjoin(get_executable_path(), 'Pictures', 'bids_icon.png'))
         pixmap = pixmap.scaled(700, 500, Qt.KeepAspectRatio)
         image.setPixmap(pixmap)
 
@@ -5132,7 +5132,7 @@ class DefaultNiftiViewer(QWidget):
         self.label.setFont(QFont('Calibri', 15))
 
         self.close_button = QPushButton('Close')
-        self.close_button.setIcon(QIcon(pjoin('Pictures', 'close.png')))
+        self.close_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'close.png')))
         self.close_button.adjustSize()
         self.close_button.clicked.connect(self.close)
 
