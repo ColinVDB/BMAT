@@ -270,6 +270,8 @@ class MainWindow(QMainWindow):
         try:
             memory_df = pd.read_pickle('memory.xz')
             self.memory = memory_df.to_dict()
+            for key in self.memory.keys():
+                self.memory[key] = self.memory[key][0]
             if self.memory.get('dcm2niix_path') == None:
                 self.memory['dcm2niix_path'] = ""
             if self.memory.get('itksnap') == None:
