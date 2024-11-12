@@ -270,10 +270,13 @@ class MainWindow(QMainWindow):
         try:
             memory_df = pd.read_pickle('memory.xz')
             self.memory = memory_df.to_dict()
-            for key in self.memory.keys():
-                self.memory[key] = self.memory[key][0]
+            if self.memory.get('dcm2niix_path') == None:
+                self.memory['dcm2niix_path'] = ""
+            if self.memory.get('itksnap') == None:
+                self.memory['itksnap'] = ""
         except FileNotFoundError:
             memory_df = {'dcm2niix_path':None, 'itksnap':None}
+            self.memory = memory_df
         self.system = platform.system()
         
         print(f'Is the application compiled ? {is_compiled()}')
@@ -348,6 +351,7 @@ class MainWindow(QMainWindow):
 
         # Create menu bar and add action
         self.menu_bar = self.menuBar()
+        self.menu_bar.setNativeMenuBar(False)
         self.bmat_menu = self.menu_bar.addMenu('&BMAT')
         
         preferences = QAction('&Preferences', self)
