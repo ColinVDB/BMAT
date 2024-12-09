@@ -312,7 +312,9 @@ class MainWindow(QMainWindow):
         #                             self.pipelines[jsn.get('name')]['import'] = __import__(f'{import_r}.{import_name}', globals(), locals(), [attr], 0)
         #                             f.close()
         if os.path.isdir(pjoin(self.bmat_path, 'Pipelines')):
-            for dirs in os.listdir(pjoin(self.bmat_path, 'Pipelines')):
+            listdirs = list(os.listdir(pjoin(self.bmat_path, 'Pipelines')))
+            listdirs = sorted(listdirs, key=lambda x: x.lower())
+            for dirs in listdirs:
                 if os.path.isdir(pjoin(self.bmat_path, 'Pipelines', dirs)):
                     for d in os.listdir(pjoin(self.bmat_path, 'Pipelines', dirs)):
                         if d == 'src':
@@ -336,7 +338,9 @@ class MainWindow(QMainWindow):
         self.local_pipelines_name = []
 
         if os.path.isdir(pjoin(self.bmat_path, 'LocalPipelines')):
-            for dirs in os.listdir(pjoin(self.bmat_path, 'LocalPipelines')):
+            listdirs = list(os.listdir(pjoin(self.bmat_path, 'LocalPipelines')))
+            listdirs = sorted(listdirs, key=lambda x: x.lower())
+            for dirs in listdirs:
                 if os.path.isdir(pjoin(self.bmat_path, 'LocalPipelines', dirs)):
                     for file in os.listdir(pjoin(self.bmat_path, 'LocalPipelines', dirs)):
                         if '.json' in file:
