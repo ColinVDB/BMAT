@@ -446,7 +446,7 @@ class MainWindow(QMainWindow):
 
         """
         self.setWindowTitle('BMAT')
-        self.setWindowIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'bids_icon.png')))
+        self.setWindowIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'BMAT.ico')))
         self.window = QWidget(self)
         self.setCentralWidget(self.window)
         self.window.closeEvent = self.closeEvent
@@ -5077,7 +5077,7 @@ class DefaultViewer(QWidget):
 
         image = QLabel(self)
         image.setAlignment(Qt.AlignCenter)
-        pixmap = QPixmap(pjoin(get_executable_path(), 'Pictures', 'bids_icon.png'))
+        pixmap = QPixmap(pjoin(get_executable_path(), 'Pictures', 'BMAT.png'))
         pixmap = pixmap.scaled(700, 500, Qt.KeepAspectRatio)
         image.setPixmap(pixmap)
 

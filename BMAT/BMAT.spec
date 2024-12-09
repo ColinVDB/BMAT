@@ -40,7 +40,7 @@ exe = EXE(
     strip=False,  # Strip debug symbols.
     upx=True,  # Compress the executable with UPX.
     console=True,  # Console application for Windows (False for windowed).
-    icon='Pictures/bmat_icon.ico' # icon off application
+    icon="Pictures/BMAT.ico"  # path to icon file
 )
 
 coll = COLLECT(
