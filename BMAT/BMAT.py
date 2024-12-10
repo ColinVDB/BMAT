@@ -5078,7 +5078,7 @@ class DefaultViewer(QWidget):
         image = QLabel(self)
         image.setAlignment(Qt.AlignCenter)
         pixmap = QPixmap(pjoin(get_executable_path(), 'Pictures', 'BMAT.png'))
-        pixmap = pixmap.scaled(700, 500, Qt.KeepAspectRatio)
+        pixmap = pixmap.scaled(self.width(), self.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
         image.setPixmap(pixmap)
 
         # # Optional, resize window to image size
