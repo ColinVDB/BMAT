@@ -29,7 +29,8 @@ BMAT is now compatible to work with remote server using shared samba folder and 
         * [Available Pipelines](#available-pipelines)
     * [Local Pipelines](#local-pipelines)
         * [Adding Local Pipelines](#adding-local-pipelines)
-5. [Installation from Source Code](#installation-from-source-code)
+5. [Server compatibility (UCLouvain/IoNS)](#server-compatibility-uclouvainions)
+6. [Installation from Source Code](#installation-from-source-code)
     * [Dependencies](#dependencies-1)
         * [Python](#python)
             * [Linux](#linux)
@@ -114,6 +115,7 @@ Here is a picture of the main window of BMAT. It is composed of these different 
 * Dataset Information (top center): contains information about the dataset
 * Dataset Actions (top right): buttons to perform Actions on the dataset
 * Quick Viewer (bottom right): Quick viewer to observe the file in the dataset in a safe manner
+* BMAT menu: set preferences path for ITK-SNAP and dcm2niix
 * BIDS menu (top left): contains other other actions to manage the dataset
 * Pipelines menu (top left): add and run analysis pipelines shared by the BMAT-community
 * Local Pipelines menu (top left): run local analysis pipelines implemented by the user
@@ -163,7 +165,7 @@ This menu contains some more features to manage the BIDS dataset. Here is a desc
 * Create BIDS directory: this will open a similar window to the first one for the user to create a new empty folder to select and create a new empty BIDS dataset.
 * Change BIDS directory: this will open a similar window to the first one for the user to select a new folder corresponding to a new BIDS dataset.
 * BIDS Quality Control: this will run a *bids-validator* program that will give the user informations about the validity of his BIDS dataset according to the BIDS specifications as well as give a link towards the BIDS specifications
-* Update Authors: allows the user to update the name of the authors of the BIDS dataset. 
+* Update Dataset Description: allows the user to update the name of the authors of the BIDS dataset. 
 
 ### Pipelines Menu
 
@@ -177,7 +179,6 @@ By clicking on the *Add New Pipeline* item from the *Pipelines* drop-down menu, 
 
 The user can then click on any pipeline to open another specific window that shows the documentation of the pipeline, as can be found on GitHub (cf. Figure below). The user has the possibility to download the pipeline by clicking on the *Get Pipeline* button. 
 
-![Pipeline Window](/Readme_Pictures/phase_unwrap.png)
 
 #### Available pipelines
 
@@ -199,6 +200,9 @@ BMAT allows the user to add his own pipelines to the software to run specific in
     
 The implementation of the computation part of the pipeline can use docker container or can be implemented locally, allowing adaptability of the software to a wide range of Neuroimaging applications.
 
+## Server compatibility (UCLouvain/IoNS)
+
+TO DO
 
 ## Installation from source code
 
