@@ -19,6 +19,7 @@ import pandas as pd
 from pydicom import dcmread
 import logging
 import sys
+import portalocker
 # from nipype.interfaces.dcm2nii import Dcm2niix
 
 from tqdm.auto import tqdm
@@ -35,7 +36,7 @@ class BIDSHandler:
     """
     
     
-    def __init__(self, root_dir, logger=None):
+    def __init__(self, root_dir, sequences_csv=None, logger=None):
         """
         
 
@@ -76,9 +77,15 @@ class BIDSHandler:
         # setup_logging('dicom2bids')
         self.logger = logging.getLogger('dicom2bids')
         self.logger.setLevel(logging.DEBUG)
+        self.dcm2niix_path = None
         
-        self.sequences_df = pd.read_csv('sequences.csv')
-        self.sequences_df.fillna('', inplace=True)
+        if sequences_csv == None:
+            dir_path = os.path.dirname(os.path.abspath(__file__))
+            self.sequences_df = pd.read_csv(pjoin(dir_path, 'sequences.csv'))
+            self.sequences_df.fillna('', inplace=True)
+        else:
+            self.sequences_df = pd.read_csv(sequences_csv)
+            self.sequences_df.fillna('', inplace=True)
         
         self.wrong_extensions = ['.jsn', '.bval', '.bvec', '.nii', '.gz', '.jpg']
         
@@ -118,7 +125,11 @@ class BIDSHandler:
         None.
 
         """
-        self.dicom2niix_path = dcm2niix_path
+        if dcm2niix_path == '' or dcm2niix_path == None or dcm2niix_path == 'use_docker':
+            print('dcm2niix_path does not exist')
+            return
+        else:
+            self.dicom2niix_path = dcm2niix_path
         
         
     def update_number_of_subjects(self, logger=logging):
@@ -249,7 +260,7 @@ class BIDSHandler:
 
         """
         if not pexists(dirpath):
-            os.mkdir(dirpath)
+            os.makedirs(dirpath)
             
 
     def convert_all_dicoms(self, directory, convert=True, logger=logging):
@@ -289,7 +300,11 @@ class BIDSHandler:
                 # subprocess.Popen(f'docker run --rm -v "{path}":/media -v "{directory}":/mnt xnat/dcm2niix dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /mnt /media', shell=True).wait()
                 # self.client.containers.run('xnat/dcm2niix', auto_remove=True, volumes={f'{path}':{'bind':'/media', 'mode':'ro'}, f'{directory}':{'bind':'/mnt', 'mode':'rw'}}, command=['dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /mnt /media'])
                 # subprocess.Popen(f'dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o {directory} {path}', shell=True).wait()
-                subprocess.Popen(f'docker run --rm --privileged -v "{directory}":/home -v "{path}":/media colinvdb/bmat-dcm2niix dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /home /media', shell=True).wait()
+                if self.dcm2niix_path:
+                    subprocess.Popen(f'{self.dcm2niix_path} -f \"%d_%p_%t_%s\" -p y -z y -o {directory} {path}', shell=True).wait()
+                else:
+                    print('Use docker for conversion')
+                    subprocess.Popen(f'docker run --rm --privileged -v "{directory}":/home -v "{path}":/media colinvdb/bmat-dcm2niix dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /home /media', shell=True).wait()
                 
         for _,_,files in os.walk(directory):
             for file in files:
@@ -522,7 +537,7 @@ class BIDSHandler:
         
         if not pexists(pjoin(bids_dir, "README")):
             from shutil import copy as shcopy
-            shcopy("readme_example", 
+            shcopy(pjoin(os.path.dirname(os.path.abspath(__file__)), "readme_example"), 
                    pjoin(bids_dir, "README"))
         
         # print("WTF-return make_directories_from")
@@ -554,7 +569,7 @@ class BIDSHandler:
             pass
 
 
-    def delete_subject(self, pat_id, delete_sourcedata=False, logger=logging):
+    def delete_subject(self, sub, delete_sourcedata=False, logger=logging):
         """
         
 
@@ -572,44 +587,38 @@ class BIDSHandler:
         None.
 
         """
-        patient_id = None
-        if delete_sourcedata == False:
-            try:
-                participants = pd.read_csv(pjoin(self.root_dir, "participants.tsv"), sep='\t').to_dict()
-            except FileNotFoundError: 
-                logging.error('participants.tsv does not exists')
-                return
-            try:
-                key_num = list(participants['participant_id'].values()).index(f'sub-{pat_id}')
-            except ValueError:
-                logging.error('sub-{pat_id} is not present in the database (participants.tsv)')
-                return
-            
-            patient_id = participants['patient_id'][key_num]
-            if patient_id == None:
-                patient_id = participants['participant_name'][key_num]
-            if patient_id == None:
-                patient_id = pat_id
+        
+        if not pexists(pjoin(self.root_dir, f'sub-{sub}')):
+            print(f'[ERROR] sub-{sub} does not exists')
+            return
         
         bids_dir = self.root_dir
         subject_dirs = [dirpath for dirpath, subdirs, _ in os.walk(bids_dir)
-                        if dirpath.endswith(f"sub-{pat_id}")]
-
+                        if dirpath.endswith(f"sub-{sub}")]
         for s in subject_dirs:
             if "sourcedata" in s:
                 if delete_sourcedata: 
                     rmtree(s)
                 else:
-                    dst = pjoin(s.replace(f'sub-{pat_id}',''), f'deleted_subjects', f'sub-{patient_id}')
+                    dst = pjoin(s.replace(f'sub-{sub}',''), 'deleted_subjects', f'sub-{sub}')
                     shutil.copytree(s,dst)
                     rmtree(s)
             else:
                 rmtree(s)
                 
-        self.modify_participants_tsv(old_sub=pat_id)
+        # check if sub folder is empty
+        if len(os.listdir(pjoin(bids_dir, f'sub-{sub}'))) == 0:
+            print('empty sub folder')
+            shutil.rmtree(pjoin(bids_dir, f'sub-{sub}'))
+            
+        if len(os.listdir(pjoin(bids_dir, 'sourcedata', f'sub-{sub}'))) == 0:
+            print('empty sourcedata sub folder')
+            shutil.rmtree(pjoin(bids_dir, 'sourcedata', f'sub-{sub}'))
+                
+        self.modify_participants_tsv(old_sub=sub)
         
 
-    def delete_session(self, pat_id, session, delete_sourcedata=False, logger=logging):
+    def delete_session(self, sub, ses, delete_sourcedata=False, logger=logging):
         """
         
 
@@ -629,46 +638,40 @@ class BIDSHandler:
         None.
 
         """
-        patient_id = None
-        if delete_sourcedata == False:
-            try:
-                participants = pd.read_csv(pjoin(self.root_dir, "participants.tsv"), sep='\t').to_dict()
-            except FileNotFoundError: 
-                logging.error('participants.tsv does not exists')
-                return
-            try:
-                key_num = list(participants['participant_id'].values()).index(f'sub-{pat_id}')
-            except ValueError:
-                logging.error('sub-{pat_id} is not present in the database (participants.tsv)')
-                return
-            
-            patient_id = participants['patient_id'][key_num]
-            if patient_id == None:
-                patient_id = participants['participant_name'][key_num]
-            if patient_id == None:
-                patient_id = pat_id
+        if not pexists(pjoin(self.root_dir, f'sub-{sub}', f'ses-{ses}')):
+            print(f'[ERROR] sub-{sub} ses-{ses} does not exists')
+            return
                 
         bids_dir = self.root_dir
         dirs = [dirpath for dirpath, subdirs, _ in os.walk(bids_dir)
-                    if f"sub-{pat_id}" in dirpath and
-                        dirpath.endswith(f"ses-{session}")]
+                    if f"sub-{sub}" in dirpath and
+                        dirpath.endswith(f"ses-{ses}")]
 
         for s in dirs:
             if "sourcedata" in s:
                 if delete_sourcedata: 
                     rmtree(s)
                 else:
-                    dst = pjoin(s.replace(f'ses-{session}',''), f'deleted_sessions', f'delses-{session}')
+                    dst = pjoin(s.replace(pjoin(f'sub-{sub}', f'ses-{ses}'),''), f'deleted_subject', f'sub-{sub}', f'ses-{ses}')
                     shutil.copytree(s,dst)
                     rmtree(s)
             else:
                 rmtree(s)
                 
-        self.modify_participants_tsv(old_sub=pat_id, new_sub=pat_id, old_ses=session)
+        # check if sub folder is empty
+        if len(os.listdir(pjoin(bids_dir, f'sub-{sub}'))) == 0:
+            print('empty sub folder')
+            shutil.rmtree(pjoin(bids_dir, f'sub-{sub}'))
+            
+        if len(os.listdir(pjoin(bids_dir, 'sourcedata', f'sub-{sub}'))) == 0:
+            print('empty sourcedata sub folder')
+            shutil.rmtree(pjoin(bids_dir, 'sourcedata', f'sub-{sub}'))
+                
+        self.modify_participants_tsv(old_sub=sub, old_ses=ses)
         
 
     def rename_and_move_nifti(self, dicom_series, pat_id, session='01', logger=logging):
-        # print('WTF???')
+        print('rename and move nifti')
         """
         
 
@@ -836,7 +839,7 @@ class BIDSHandler:
                     os.remove(pjoin(path, file))
 
 
-    def rename_subject(self, old_id, new_id, logger=logging):
+    def rename_subject(self, old_sub, old_ses, new_sub, new_ses, logger=logging):
         """
         
 
@@ -861,34 +864,48 @@ class BIDSHandler:
         None.
 
         """
+        print('rename_subject')
         bids_dir = self.root_dir
         # Replaces all paths with "sub-old_id" by the same path with "sub-new_id"
-        if pexists(pjoin(bids_dir, f'sub-{new_id}')):
-            msg = f"Subject {new_id} already exists in the database. "
+        if pexists(pjoin(bids_dir, f'sub-{new_sub}', f'ses-{new_ses}')):
+            msg = f"Subject {new_sub} ses-{new_ses} already exists in the database. "
             msg += "Delete the subject first or choose another subject id."
             logging.error(msg)
             raise FileExistsError(msg)
             
-        if not pexists(pjoin(bids_dir, f'sub-{old_id}')):
-            logging.error(f"Subject {old_id} is not in the database.")
-            raise FileNotFoundError(f"Subject {old_id} is not in the database.")
-
+        if not pexists(pjoin(bids_dir, f'sub-{old_sub}', f'ses-{old_ses}')):
+            logging.error(f"Subject {old_sub} ses-{old_ses} is not in the database.")
+            raise FileNotFoundError(f"Subject {old_sub} ses-{old_ses} is not in the database.")
+        
+        print('check passed')
         for dirpath, _, files in os.walk(bids_dir):
 
             if "sourcedata" in dirpath: continue
 
             for filename in files:
-                if filename.startswith(f'sub-{old_id}'):
+                if filename.startswith(f'sub-{old_sub}_ses-{old_ses}'):
                     shutil.move(pjoin(dirpath, filename),
-                                pjoin(dirpath, filename.replace(f"sub-{old_id}",
-                                                                f"sub-{new_id}")))
+                                pjoin(dirpath, filename.replace(f"sub-{old_sub}_ses-{old_ses}",
+                                                                f"sub-{new_sub}_ses-{new_ses}")))
 
         for dirpath, _, _ in os.walk(bids_dir):
-            if dirpath.endswith(f"sub-{old_id}"):
-                shutil.move(dirpath, dirpath.replace(f"sub-{old_id}",
-                                                     f"sub-{new_id}"))
+            dirpath = os.path.normpath(dirpath)
+            sub_ses_path = os.path.normpath(pjoin(f'sub-{old_sub}', f'ses-{old_ses}'))
+            if dirpath.endswith(sub_ses_path):
+                print(dirpath)
+                print(dirpath.replace(pjoin(f"sub-{old_sub}", f'ses-{old_ses}'), pjoin(f"sub-{new_sub}", f'ses-{new_ses}')))
+                shutil.move(dirpath, dirpath.replace(pjoin(f"sub-{old_sub}", f'ses-{old_ses}'), pjoin(f"sub-{new_sub}", f'ses-{new_ses}')))
+                
+        # check if sub folder is empty
+        if len(os.listdir(pjoin(bids_dir, f'sub-{old_sub}'))) == 0:
+            print('empty sub folder')
+            shutil.rmtree(pjoin(bids_dir, f'sub-{old_sub}'))
+            
+        if len(os.listdir(pjoin(bids_dir, 'sourcedata', f'sub-{old_sub}'))) == 0:
+            print('empty sourcedata sub folder')
+            shutil.rmtree(pjoin(bids_dir, 'sourcedata', f'sub-{old_sub}'))
         
-        self.modify_participants_tsv(old_sub=old_id, new_sub=new_id)
+        self.modify_participants_tsv(old_sub=old_sub, new_sub=new_sub, old_ses=old_ses, new_ses=new_ses)
         
 
     def rename_session(self, subject, old_ses, new_ses, logger=logging):
@@ -970,6 +987,7 @@ class BIDSHandler:
         None.
 
         """
+        print('rename sequence')
         for path, dirs, files in os.walk(self.root_dir):
             for file in files:
                 if old_seq in file:
@@ -1020,7 +1038,7 @@ class BIDSHandler:
 
 
     def convert_dicoms_to_bids(self, dicomfolder, pat_id=None, session=None,
-                               return_dicom_series=False, logger=logging):
+                               return_dicom_series=False, copy_dicomfolder=True, logger=logging):
         """
         
 
@@ -1062,13 +1080,17 @@ class BIDSHandler:
         # pat_id, session = make_directories(bids_dir,pat_id='ID_TO_SPECIFY',session='SESSION_TO_SPECIFY')
         # print("Debug, why does it stop")
         # Rename and move all (interesting) converted files into the bids directory
-        self.rename_and_move_nifti(dicom_series, pat_id, session, logger=logger)
-
-        self.copy_dicomfolder_to_sourcedata(dicomfolder, pat_id, session, logger=logger)
+        try:
+            self.rename_and_move_nifti(dicom_series, pat_id, session, logger=logger)
+        except Exception as e:
+            print(f'[ERROR] {e}')
+        
+        self.anonymisation(pat_id, session, dicomfolder, logger=logger)
+        
+        if copy_dicomfolder:
+            self.copy_dicomfolder_to_sourcedata(dicomfolder, pat_id, session, logger=logger)
 
         # pat_name, pat_date = self.separate_dicoms(dicomfolder, pat_id, session)
-
-        self.anonymisation(pat_id, session, logger=logger)
         
         logging.info(f"[INFO] done for patient {pat_id}")
 
@@ -1321,7 +1343,7 @@ class BIDSHandler:
         # participants_tsv_df.to_csv(pjoin(self.root_dir, "participants.tsv"), index=False, sep='\t')
 
 
-    def anonymisation(self, pat_id, pat_ses, logger=logging):
+    def anonymisation(self, sub, ses, src, logger=logging):
         """
         
 
@@ -1339,168 +1361,92 @@ class BIDSHandler:
         None.
 
         """
+        print('participants.tsv')
+
+        wrong_extensions = ['.jsn', '.bval', '.bvec', '.nii', '.gz', '.jpg', 'json']
         
-        src = pjoin(self.root_dir, f'sourcedata', f'sub-{pat_id}', f'ses-{pat_ses}')
-        
-        wrong_extensions = ['.jsn', '.bval', '.bvec', '.nii', '.gz', '.jpg']
-        
-        # pat_name = None
-        # pat_date = None
-        # pat_folder_id = None
-        save_participants_json = False
-        if pexists(pjoin(self.root_dir, "participants.json")):
-            with open(pjoin(self.root_dir, "participants.json")) as part_json:
-                participants_json = json.load(part_json)
-        else:
+        if not pexists(pjoin(self.root_dir, "participants.json")):
             participants_json = {
                                  "participant_id":{"Description":"Corresponding ID of the participant in the BIDS directory"},
-                                 "age":{"Description": "age of the participant",
-                                        "Units": "years",
-                                        "dicom_tags":["PatientAge"]
-                                        },
+                                 "session":{"Description":"Session ID"},
                                  "sex":{"Description": "sex of the participant as reported by the participant",
                                         "Levels": {"M": "male",
                                                    "F": "female"
                                                    },
                                         "dicom_tags":["PatientSex"]
                                         },
-                                 "ses-01":{"Description":"Date of the MRI session number 01",
-                                           "dicom_tags":["AcquisitionDate", "Date"]}
+                                 "age":{"Description": "age of the participant the time of session",
+                                        "Units": "years",
+                                        "dicom_tags":["PatientAge"]
+                                        },
+                                 "date":{"Description":"Date of the session", "dicom_tags":["Date","AcquisitionDate","AcquisitionDateTime"]}
                                  }
-            save_participants_json = True
-            
-        if pexists(pjoin(self.root_dir, "participants.tsv")):
-            participants_tsv = pd.read_csv(pjoin(self.root_dir, "participants.tsv"), sep='\t').to_dict()
+            with open(pjoin(self.root_dir, 'participants.json'), 'w') as fp:
+                json.dump(participants_json, fp)
         else:
-            participants_tsv = {'participant_id':{}, 'age':{}, 'sex':{}, 'ses-01':{}}
-                        
-        if f'ses-{pat_ses}' not in participants_tsv.keys():
-            sessions = [x for x in participants_json.keys() if 'ses' in x]
-            last_ses = sessions[-1]
-            # participants_json[f'ses-{pat_ses}'] = {"Description":"Date of the MRI session number 01", "dicom_tags":["AcquisitionDate", "Date"]}
-            participants_json_list = list(participants_json.items())
-            participants_tsv_list = list(participants_tsv.items())
-            last_ses_idx = list(participants_json.keys()).index(last_ses)
-            participants_json_list.insert(last_ses_idx+1, (f'ses-{pat_ses}', {"Description":f"Date of the MRI session number {pat_ses}", "dicom_tags":["AcquisitionDate", "Date"]}))
-            participants_tsv_list.insert(last_ses_idx+1, (f'ses-{pat_ses}', {}))
-            participants_json = dict(participants_json_list)
-            participants_tsv = dict(participants_tsv_list)
-            save_participants_json = True
+            with open(pjoin(self.root_dir, "participants.json")) as part_json:
+                participants_json = json.load(part_json)            
         
+        sub_ses_df = pd.DataFrame()
+        sub_ses_df.at[0, 'participant_id'] = f'sub-{sub}'
+        sub_ses_df.at[0, 'session'] = f'ses-{ses}'
         participants_json_keys = list(participants_json.keys())
-        participants_json_keys.remove('participant_id')
-        sessions = [x for x in participants_json_keys if 'ses' in x]
-        for ses in sessions:
-            if ses != f'ses-{pat_ses}':
-                participants_json_keys.remove(ses)
-        # print(participants_json_keys)
-        tags = [(x, participants_json.get(x).get('dicom_tags')) for x in participants_json_keys]
-        results = [None]*len(tags)
-        tags_bool = [False]*len(tags)
+        try:
+            participants_json_keys.remove('participant_id')
+            participants_json_keys.remove('session')
+        except ValueError:
+            pass
+        infos = {}
+        for key in participants_json_keys:
+            infos[key] = False
         
         for root, dirs, files in os.walk(src):
             for file in files:
                 if "." not in file[0] or not any([ext in file for ext in wrong_extensions]):# exclude non-dicoms, good for messy folders
                     # read the file
                     ds = dcmread(pjoin(root,file), force=True)
-
-            #         if pat_name == None:
-            #             pat_name = ds.get('PatientName')
-            #         if pat_name == None:
-            #             pat_name = ds.get('Name')
-                    # if pat_date == None:
-                    #     pat_date = ds.get('AcquisitionDateTime')
-                    # if pat_date == None:
-                    #     pat_date = ds.get('AcquisitionDate')
-                    # if pat_date == None:
-                    #     pat_date = ds.get('Date')
-                    # if pat_date == None:
-                    #     pat_date = ds.get('ContentDate')
-                    # pat_folder_id = ds.get('PatientID')
-                
-            #     if pat_name != None and pat_date != None and pat_folder_id != None:
-            #         break
+                    
+                    for key in infos.keys():
+                        if not infos[key]:
+                            for tag in participants_json[key]['dicom_tags']:
+                                val = ds.get(tag)
+                                if val != None:
+                                    sub_ses_df.at[0, key] = str(val)
+                                    infos[key] = True
+                                    break
+                            if val == None:
+                                sub_ses_df.at[0, key] = val
+                                    
+                    if all(infos.values()):
+                        break
+        
+        # if pexists(pjoin(self.root_dir, "participants.tsv")):
+        #     participants_tsv = pd.read_csv(pjoin(self.root_dir, "participants.tsv"), sep='\t')
+        # else:
+        #     participants_tsv = {'participant_id':{}, 'age':{}, 'sex':{}, 'ses-01':{}}
+        
+        # print(f'{sub_ses_df=}')
+        
+        create_tsv = False
+        if not pexists(pjoin(self.root_dir, "participants.tsv")):
+            create_tsv = True
+            open(pjoin(self.root_dir, "participants.tsv"), 'a').close()
             
-            # if pat_name != None and pat_date != None and pat_folder_id != None:
-            #     break
-                    i = 0
-                    for tag in tags:
-                        dcm_tags = tag[1]
-                        for dcm_tag in dcm_tags:
-                            val = ds.get(dcm_tag)
-                            if val != None:
-                                results[i] = val
-                                tags_bool[i] = True
-                                break
-                        i = i+1
-                if all(tags_bool):
-                    break
-            if all(tags_bool):
-                break
-
-        # # check if new patient
-        # if f'sub-{pat_id}' in participants_tsv['participant_id'].keys():
-        #     key_num = list(participants_tsv['participant_id'].values()).index(f'sub-{pat_id}')
-        #     if f'ses-{pat_ses}' not in anonym.keys():
-        #         anonym[f'ses-{pat_ses}'] = {}
-        #     # update dicionary with the date of the new session
-        #     anonym[f'ses-{pat_ses}'][key_num] = pd.Timestamp(pat_date)
-        # else:
-        #     # add new patient
-        #     key_num = len(anonym['participant_id'])
-        #     anonym['participant_name'][key_num] = pat_name
-        #     anonym['participant_id'][key_num] = f'sub-{pat_id}'
-        #     anonym['patient_id'][key_num] = pat_folder_id
-        #     if f'ses-{pat_ses}' not in anonym.keys():   
-        #         anonym[f'ses-{pat_ses}'] = {}
-        #     anonym[f'ses-{pat_ses}'][key_num] = pd.Timestamp(pat_date)
-        
-        # if f'sub-{pat_id}' in participants_tsv['participant_id'].keys():
-        #     key_num = list(participants_tsv['participant_id'].values()).index(f'sub-{pat_id}')
-        #     if f'ses-{pat_ses}' not in participants_tsv.keys():
-        #         participants_tsv[f'ses-{pat_ses}'] = {}
-        #     # update dicionary with the date of the new session
-        #     participants_tsv[f'ses-{pat_ses}'][key_num] = pd.Timestamp(pat_date)
-        # else:
-        #     # add new patient
-        #     key_num = len(participants_tsv['participant_id'])
-        #     participants_tsv['participant_id'][key_num] = f'sub-{pat_id}'
-        #     if f'ses-{pat_ses}' not in participants_tsv.keys():   
-        #         participants_tsv[f'ses-{pat_ses}'] = {}
-        #     participants_tsv[f'ses-{pat_ses}'][key_num] = pd.Timestamp(pat_date)
-        # print(tags)
-        # print(results)
-        if f'sub-{pat_id}' in participants_tsv['participant_id'].values():
-            key_num = list(participants_tsv['participant_id'].values()).index(f'sub-{pat_id}')
-        else:
-            # add new patient
-            key_num = len(participants_tsv['participant_id'])
-            participants_tsv['participant_id'][key_num] = f'sub-{pat_id}'
-        i = 0
-        for tag in tags:
-            if tag[0] not in participants_tsv.keys():
-                participants_tsv[tag[0]] = {}
-            # update dicionary with the date of the new session
-            if 'ses' in tag[0]:
-                if results[i] != None and results[i] != '':
-                    participants_tsv[tag[0]][key_num] = pd.Timestamp(results[i])
-                else:
-                    participants_tsv[tag[0]][key_num] = 'n/a'
+        with portalocker.Lock(pjoin(self.root_dir, "participants.tsv"), 'r+', timeout=60) as f:
+            if create_tsv:
+                print('create tsv')
+                participants_df = pd.DataFrame()
             else:
-                if results[i] != None and results[i] != '':
-                    participants_tsv[tag[0]][key_num] = results[i]
-                else:
-                    participants_tsv[tag[0]][key_num] = 'n/a'
-            i = i+1
-
-        # Save anonym dic to csv
-        participants_tsv_df = pd.DataFrame(participants_tsv)
-        participants_tsv_df.to_csv(pjoin(self.root_dir, "participants.tsv"), index=False, sep='\t')
-        
-        # Save participants_json
-        if save_participants_json:
-            with open(pjoin(self.root_dir, 'participants.json'), 'w') as fp:
-                json.dump(participants_json, fp)
+                f.seek(0)
+                try:
+                    participants_df = pd.read_csv(f, sep='\t')
+                except Exception:
+                    participants_df = pd.DataFrame()
+            participants_df = pd.concat([participants_df, sub_ses_df])
+            participants_df.sort_values(['participant_id', 'session'], ascending=[True, True], inplace=True)
+            f.seek(0)
+            participants_df.to_csv(f, index=False, sep='\t')
+            f.truncate()
 
         logging.info('[INFO] Anonymisation done')
         
@@ -1527,42 +1473,79 @@ class BIDSHandler:
         None.
 
         """
+        print('modify_participants_tsv')
         try:
             participants = pd.read_csv(pjoin(self.root_dir, "participants.tsv"), sep='\t').to_dict()
         except FileNotFoundError: 
-            logging.error('participants.tsv does not exists')
-            return
-        if old_sub == '':
-            return 
-        try:
-            key_num = list(participants['participant_id'].values()).index(f'sub-{old_sub}')
-        except ValueError:
-            logging.error('sub-{old_sub} is not present in the database (participants.tsv)')
+            print('participants.tsv does not exists')
             return
         
-        if new_sub == '':
-            for key in participants.keys():
-                del participants[key][key_num]
-        elif new_sub != old_sub:
-            participants['participant_id'][key_num] = f'sub-{new_sub}'
-        elif new_sub == old_sub:
-            if old_ses == '':
-                return
-            else:
-                if f'ses-{old_ses}' not in participants.keys():
-                    logging.error(f'Subject {old_sub} does not have a session {old_ses}')
-                    pass
-                else:
-                    if new_ses == '':
-                        del participants[f'ses-{old_ses}'][key_num]
+        with portalocker.Lock(pjoin(self.root_dir, "participants.tsv"), 'r+', timeout=60) as f:
+
+            f.seek(0)
+            try:
+                participants_df = pd.read_csv(f, sep='\t')
+                if old_ses != '':
+                    sub_ses_df = participants_df[(participants_df['participant_id'] == f'sub-{old_sub}') & (participants_df['session'] == f'ses-{old_ses}')]
+                    if sub_ses_df.empty:
+                        print(f'[ERROR] participants.tsv does not contain sub-{old_sub} ses-{old_ses}')
+                        return
+                    print(sub_ses_df)
+                    index = sub_ses_df.index[0]
+                    
+                    if new_sub == '' and new_ses == '':
+                        participants_df.drop(index, inplace=True)
                     else:
-                        ses_date = participants[f'ses-{old_ses}'][key_num]
-                        del participants[f'ses-{old_ses}'][key_num]
-                        participants[f'ses-{new_ses}'][key_num] = ses_date
-        else:
-            pass                    
-        participants_df = pd.DataFrame(participants)
-        participants_df.to_csv(pjoin(self.root_dir, "participants.tsv"), index=False, sep='\t')
+                        if new_sub == '':
+                            print('new_sub == ')
+                            new_sub = old_sub
+                        if new_ses == '':
+                            new_ses = old_ses
+                        participants_df.at[index, 'participant_id'] = f'sub-{new_sub}'
+                        participants_df.at[index, 'session'] = f'ses-{new_ses}'
+                else:
+                    sub_df = participants_df[participants_df['participants_id'] == f'sub-{old_sub}']
+                    if new_sub == '' and new_ses == '':
+                        for i in sub_df.index:
+                            participants_df.drop(i, inplace=True)
+                f.seek(0)
+                participants_df.to_csv(f, index=False, sep='\t')
+                f.truncate()
+            except Exception as e:
+                print('[ERROR] {e}')
+                return
+        
+        # if old_sub == '':
+        #     return 
+        # try:
+        #     key_num = list(participants['participant_id'].values()).index(f'sub-{old_sub}')
+        # except ValueError:
+        #     logging.error('sub-{old_sub} is not present in the database (participants.tsv)')
+        #     return
+        
+        # if new_sub == '':
+        #     for key in participants.keys():
+        #         del participants[key][key_num]
+        # elif new_sub != old_sub:
+        #     participants['participant_id'][key_num] = f'sub-{new_sub}'
+        # elif new_sub == old_sub:
+        #     if old_ses == '':
+        #         return
+        #     else:
+        #         if f'ses-{old_ses}' not in participants.keys():
+        #             logging.error(f'Subject {old_sub} does not have a session {old_ses}')
+        #             pass
+        #         else:
+        #             if new_ses == '':
+        #                 del participants[f'ses-{old_ses}'][key_num]
+        #             else:
+        #                 ses_date = participants[f'ses-{old_ses}'][key_num]
+        #                 del participants[f'ses-{old_ses}'][key_num]
+        #                 participants[f'ses-{new_ses}'][key_num] = ses_date
+        # else:
+        #     pass                    
+        # participants_df = pd.DataFrame(participants)
+        # participants_df.to_csv(pjoin(self.root_dir, "participants.tsv"), index=False, sep='\t')
 
 
 if __name__ == '__main__':

@@ -36,7 +36,8 @@ from PyQt5.QtCore import (QSize,
                           pyqtProperty, 
                           QObject, 
                           QTextCodec, 
-                          QUrl)
+                          QUrl, 
+                          QMetaObject)
 from PyQt5.QtWidgets import (QDesktopWidget,
                              QApplication,
                              QWidget,
@@ -69,14 +70,16 @@ from PyQt5.QtWidgets import (QDesktopWidget,
                              QSizePolicy,
                              QFrame, 
                              QGroupBox, 
-                             QSpacerItem)
+                             QSpacerItem, 
+                             QCheckBox)
 from PyQt5.QtGui import (QFont,
                          QIcon,
                          QTextCursor,
                          QPixmap,
                          QColor, 
                          QMovie, 
-                         QPalette)
+                         QPalette,
+                         QCloseEvent)
 from PyQt5.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PyQt5.QtWebChannel import QWebChannel
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
@@ -99,13 +102,150 @@ import zipfile
 import requests
 from bs4 import BeautifulSoup
 import markdown
+from submit_job_sss import submit_job
 
 # from config import config_dict, STDOUT_WRITE_STREAM_CONFIG, TQDM_WRITE_STREAM_CONFIG, STREAM_CONFIG_KEY_QUEUE, \
 #     STREAM_CONFIG_KEY_QT_QUEUE_RECEIVER
 # from my_logging import setup_logging
 
 # faulthandler.enable()
+from pkg_resources import get_distribution, DistributionNotFound
+import importlib.util
+try:
+    from importlib.metadata import version  # Python 3.8+
+except ImportError:
+    from importlib_metadata import version  # For earlier versions with the backport
 
+
+def is_compiled():
+    return getattr(sys, 'frozen', False)
+
+
+def get_executable_path():
+    if is_compiled():
+        # The application is frozen (compiled)
+        return os.path.dirname(sys.executable)  # Path to the executable
+    else:
+        # The application is not compiled, return the script path
+        return os.path.dirname(os.path.abspath(__file__))
+
+    
+# def is_package_installed(package_name, version=None):
+#     """
+#     Check if a package is installed, and optionally if a specific version is installed.
+
+#     :param package_name: Name of the package to check
+#     :param version: Specific version to check for (e.g., '1.0.0')
+#     :return: True if the package (and version) is installed, False otherwise
+#     """
+#     print(f'{package_name=}')
+#     print(f'{version=}')
+#     try:
+#         dist = get_distribution(package_name)
+#         print(f'{dist=}')
+#         if version:
+#             print('check version')
+#             return dist.version == version
+#         else:
+#             return True
+#     except DistributionNotFound:
+#         return False
+
+def is_package_installed(package_name, version=None):
+    """
+    Check if a package is installed, and optionally if a specific version is installed.
+
+    :param package_name: Name of the package to check
+    :param version: Specific version to check for (e.g., '1.0.0')
+    :return: True if the package (and version) is installed, False otherwise
+    """
+    try:
+        spec = importlib.util.find_spec(package_name)
+        if spec is None:
+            print(f'Package {package_name} is not installed.')
+            return False
+        
+        print(f'Package {package_name} is installed.')
+        if version:
+            print('checking version')
+            try:
+                installed_version = version(package_name)
+                return installed_version == version_required
+            except:
+                return False
+        return True
+    except ModuleNotFoundError:
+        return False
+
+def install_package(package_name, version=None, target_dir=None):
+    """
+    Install a package using pip.
+
+    :param package_name: Name of the package to install
+    :param version: Specific version to install (e.g., '1.0.0')
+    :param target_dir: Directory to install the package to (if specified)
+    """
+    if version:
+        package_str = f"{package_name}=={version}"
+    else:
+        package_str = package_name
+
+    if target_dir:
+        subprocess.Popen(f"pip install {package_str} --target {target_dir}", shell=True).wait()
+        # subprocess.check_call([sys.executable, '-m', 'pip', 'install', package_str, '--target', target_dir])
+    else:
+        subprocess.Popen(f"pip install {package_str}", shell=True).wait()
+        # subprocess.check_call([sys.executable, '-m', 'pip', 'install', package_str])
+
+def install_requirements(requirements_path):
+    """
+    Install packages from a requirements file.
+
+    :param requirements_path: Path to the requirements.txt file
+    """
+    # Determine if the application is running in a compiled state
+    # is_compiled = getattr(sys, 'frozen', False)
+    target_dir = None
+    if is_compiled():
+        # Set the target directory for compiled applications
+        file_path = get_executable_path()
+        target_dir = pjoin(file_path, '_internal') # Adjust this path as needed
+        
+    print(f'{target_dir=}')
+
+    with open(requirements_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#'):
+                # Split the line into package name and version
+                print(f'{line=}')
+                if '==' in line:
+                    package_name, version = line.split('==')
+                    version = version.strip()
+                else:
+                    package_name = line
+                    version = None
+                print(f'{package_name=}')
+                print(f'{version=}')
+                # Check if the package is already installed
+                if not is_package_installed(package_name, version):
+                    print(f"Installing {package_name}=={version}...")
+                    install_package(package_name, version, target_dir)
+                else:
+                    print(f"{package_name}=={version} is already installed.")
+
+def get_server_info():
+    
+    bmat_path = os.path.dirname(os.path.abspath(__file__))
+    
+    server_info = None
+    with open(pjoin(bmat_path, 'server_info.json'), 'r') as f:
+        server_info = json.load(f)
+        
+    if server_info == None:
+        print('[ERROR] while loading server_info.json file')
+    
+    return server_info
 
 # =============================================================================
 # MainWindow
@@ -132,52 +272,99 @@ class MainWindow(QMainWindow):
             self.memory = memory_df.to_dict()
             for key in self.memory.keys():
                 self.memory[key] = self.memory[key][0]
+            if self.memory.get('dcm2niix_path') == None:
+                self.memory['dcm2niix_path'] = ""
+            if self.memory.get('itksnap') == None:
+                self.memory['itksnap'] = ""
         except FileNotFoundError:
-            memory_df = {}
+            memory_df = {'dcm2niix_path':None, 'itksnap':None}
+            self.memory = memory_df
         self.system = platform.system()
+        
+        print(f'Is the application compiled ? {is_compiled()}')
+        
+        print(os.getcwd())
 
         self.pipelines = {}
         self.pipelines_name = []
-        self.bmat_path = __file__.replace('BMAT.py', '')
-
-        for root, dirs, _ in os.walk('Pipelines'):
-            for d in dirs:
-                if d == 'src':
-                    for file in os.listdir(pjoin(root,d)):
-                        if os.path.isfile(pjoin(root, d, file)):
-                            if '.json' in file:
-                                import_r = pjoin(root, d).replace(os.sep,'.')
-                                f = open(pjoin(root, d, file))
-                                jsn = json.load(f)
-                                self.pipelines_name.append(jsn.get('name'))
-                                import_name = jsn.get('import_name')
-                                attr = jsn.get('attr')
-                                self.pipelines[jsn.get('name')] = jsn
-                                self.pipelines[jsn.get('name')]['import'] = __import__(f'{import_r}.{import_name}', globals(), locals(), [attr], 0)
-                                f.close()
+        self.bmat_path = get_executable_path()
+        print(self.bmat_path)
+        
+        if os.path.isdir(self.bmat_path):
+            sys.path.append(pjoin(self.bmat_path))
+        
+        # if os.path.isdir('Pipelines'):
+        #     for root, dirs, _ in os.walk('Pipelines'):
+        #         for d in dirs:
+        #             if d == 'src':
+        #                 for file in os.listdir(pjoin(root,d)):
+        #                     if os.path.isfile(pjoin(root, d, file)):
+        #                         if '.json' in file:
+        #                             import_r = pjoin(root, d).replace(os.sep,'.')
+        #                             f = open(pjoin(root, d, file))
+        #                             jsn = json.load(f)
+        #                             if jsn.get('name') == None or jsn.get('source_code') == None or jsn.get('import_name') == None or jsn.get('attr') == None:
+        #                                 continue
+        #                             self.pipelines_name.append(jsn.get('name'))
+        #                             import_name = jsn.get('import_name')
+        #                             attr = jsn.get('attr')
+        #                             self.pipelines[jsn.get('name')] = jsn
+        #                             self.pipelines[jsn.get('name')]['import'] = __import__(f'{import_r}.{import_name}', globals(), locals(), [attr], 0)
+        #                             f.close()
+        if os.path.isdir(pjoin(self.bmat_path, 'Pipelines')):
+            listdirs = list(os.listdir(pjoin(self.bmat_path, 'Pipelines')))
+            listdirs = sorted(listdirs, key=lambda x: x.lower())
+            for dirs in listdirs:
+                if os.path.isdir(pjoin(self.bmat_path, 'Pipelines', dirs)):
+                    for d in os.listdir(pjoin(self.bmat_path, 'Pipelines', dirs)):
+                        if d == 'src':
+                            for file in os.listdir(pjoin(self.bmat_path, 'Pipelines', dirs, d)):
+                                if os.path.isfile(pjoin(self.bmat_path, 'Pipelines', dirs, d, file)):
+                                    if '.json' in file:
+                                        f = open(pjoin(self.bmat_path, 'Pipelines', dirs, d, file))
+                                        jsn = json.load(f)
+                                        if jsn.get('name') == None or jsn.get('source_code') == None or jsn.get('import_name') == None or jsn.get('attr') == None:
+                                            continue
+                                        self.pipelines_name.append(jsn.get('name'))
+                                        import_name = jsn.get('import_name')
+                                        attr = jsn.get('attr')
+                                        self.pipelines[jsn.get('name')] = jsn
+                                        if os.path.isdir(pjoin(self.bmat_path, 'Pipelines', dirs, d)):
+                                            sys.path.append(pjoin(self.bmat_path, 'Pipelines', dirs, d))
+                                        self.pipelines[jsn.get('name')]['import'] = __import__(f'Pipelines.{dirs}.{d}.{import_name}', globals(), locals(), [attr], 0)
+                                        f.close()
 
         self.local_pipelines = {}
         self.local_pipelines_name = []
 
         if os.path.isdir(pjoin(self.bmat_path, 'LocalPipelines')):
-            for dirs in os.listdir(pjoin(self.bmat_path, 'LocalPipelines')):
+            listdirs = list(os.listdir(pjoin(self.bmat_path, 'LocalPipelines')))
+            listdirs = sorted(listdirs, key=lambda x: x.lower())
+            for dirs in listdirs:
                 if os.path.isdir(pjoin(self.bmat_path, 'LocalPipelines', dirs)):
                     for file in os.listdir(pjoin(self.bmat_path, 'LocalPipelines', dirs)):
                         if '.json' in file:
-                            import_r = pjoin(self.bmat_path, 'LocalPipelines', dirs).replace(os.sep,'.')
                             f = open(pjoin(self.bmat_path, 'LocalPipelines', dirs, file))
                             jsn = json.load(f)
+                            if jsn.get('name') == None or jsn.get('source_code') == None or jsn.get('import_name') == None or jsn.get('attr') == None:
+                                continue
                             self.local_pipelines_name.append(jsn.get('name'))
                             import_name = jsn.get('import_name')
                             attr = jsn.get('attr')
                             self.local_pipelines[jsn.get('name')] = jsn
-                            self.local_pipelines[jsn.get('name')]['import'] = __import__(f'{import_r}.{import_name}', globals(), locals(), [attr], 0)
+                            self.local_pipelines[jsn.get('name')]['import'] = __import__(f'LocalPipelines.{dirs}.{import_name}', globals(), locals(), [attr], 0)
                             f.close()
 
         # Create menu bar and add action
         self.menu_bar = self.menuBar()
+        self.menu_bar.setNativeMenuBar(False)
+        self.bmat_menu = self.menu_bar.addMenu('&BMAT')
+        
+        preferences = QAction('&Preferences', self)
+        preferences.triggered.connect(self.preferences)
+        self.bmat_menu.addAction(preferences)
+        
         self.bids_menu = self.menu_bar.addMenu('&BIDS')
-
         create_bids = QAction('&Create BIDS directory', self)
         create_bids.triggered.connect(self.create_bids_directory)
         self.bids_menu.addAction(create_bids)
@@ -259,18 +446,21 @@ class MainWindow(QMainWindow):
 
         """
         self.setWindowTitle('BMAT')
-        self.setWindowIcon(QIcon(pjoin('Pictures', 'bids_icon.png')))
+        self.setWindowIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'BMAT.ico')))
         self.window = QWidget(self)
         self.setCentralWidget(self.window)
         self.window.closeEvent = self.closeEvent
 
         self.center()
-
-        self.bids_dir = str(QFileDialog.getExistingDirectory(self, "Select BIDS Directory"))
+        
+        self.bids_dir = str(QFileDialog.getExistingDirectory(self, "Select BIDS Directory", options=QFileDialog.DontUseNativeDialog))
         while self.bids_dir=="":
-            self.bids_dir = str(QFileDialog.getExistingDirectory(self, "Please, select BIDS Directory"))
-
-        self.dcm2niix_path = 'dcm2niix'
+            self.bids_dir = str(QFileDialog.getExistingDirectory(self, "Please, select BIDS Directory", options=QFileDialog.DontUseNativeDialog))
+        # if self.bids_dir == None or self.bids_dir == "":
+        #     print('bruh')
+            
+            
+        # else:
 
         self.bids = BIDSHandler(root_dir=self.bids_dir)
         bids_dir_split = self.bids_dir.split('/')
@@ -287,6 +477,14 @@ class MainWindow(QMainWindow):
         self.bids_metadata = BidsMetadata(self)
 
         self.bids_actions = BidsActions(self)
+        
+        print('memory dcm2niix', self.memory.get('dcm2niix_path'))
+        if self.memory.get('dcm2niix_path') != None and self.memory.get('dcm2niix_path') != '':
+            print('memory dcm2niix', self.memory.get('dcm2niix_path'))
+            self.dcm2niix_path = self.memory.get('dcm2niix_path')
+            self.bids.setDicom2niixPath(self.dcm2niix_path)
+        else:
+            self.dcm2niix_path = None
 
         # setup_logging(self.__class__.__name__)
 
@@ -444,6 +642,14 @@ class MainWindow(QMainWindow):
         self.window.setLayout(self.layout)
 
     
+    def preferences(self):
+        
+        if hasattr(self, 'preferences_win'):
+            self.preferences_win.deleteLater()
+            del self.preferences_win
+        
+        self.preferences_win = PreferencesWindow(self, self.memory)
+        self.preferences_win.exec_()
 
     def launch_pipeline(self, pipe):
         """
@@ -468,21 +674,26 @@ class MainWindow(QMainWindow):
         self.pipelines = {}
         self.pipelines_name = []
 
-        for root, dirs, _ in os.walk('Pipelines'):
-            for d in dirs:
-                if d == 'src':
-                    for r, ds, files in os.walk(pjoin(root,d)):
-                        for file in files:
-                            if '.json' in file:
-                                import_r = r.replace(os.sep,'.')
-                                f = open(pjoin(r,file))
-                                jsn = json.load(f)
-                                self.pipelines_name.append(jsn.get('name'))
-                                import_name = jsn.get('import_name')
-                                attr = jsn.get('attr')
-                                self.pipelines[jsn.get('name')] = jsn
-                                self.pipelines[jsn.get('name')]['import'] = __import__(f'{import_r}.{import_name}', globals(), locals(), [attr], 0)
-                                f.close()
+        if os.path.isdir(pjoin(self.bmat_path, 'Pipelines')):
+            for dirs in os.listdir(pjoin(self.bmat_path, 'Pipelines')):
+                if os.path.isdir(pjoin(self.bmat_path, 'Pipelines', dirs)):
+                    for d in os.listdir(pjoin(self.bmat_path, 'Pipelines', dirs)):
+                        if d == 'src':
+                            for file in os.listdir(pjoin(self.bmat_path, 'Pipelines', dirs, d)):
+                                if os.path.isfile(pjoin(self.bmat_path, 'Pipelines', dirs, d, file)):
+                                    if '.json' in file:
+                                        f = open(pjoin(self.bmat_path, 'Pipelines', dirs, d, file))
+                                        jsn = json.load(f)
+                                        if jsn.get('name') == None or jsn.get('source_code') == None or jsn.get('import_name') == None or jsn.get('attr') == None:
+                                            continue
+                                        self.pipelines_name.append(jsn.get('name'))
+                                        import_name = jsn.get('import_name')
+                                        attr = jsn.get('attr')
+                                        self.pipelines[jsn.get('name')] = jsn
+                                        if os.path.isdir(pjoin(self.bmat_path, 'Pipelines', dirs, d)):
+                                            sys.path.append(pjoin(self.bmat_path, 'Pipelines', dirs, d))
+                                        self.pipelines[jsn.get('name')]['import'] = __import__(f'Pipelines.{dirs}.{d}.{import_name}', globals(), locals(), [attr], 0)
+                                        f.close()
         
         # self.PipelinesMenu.deleteLater()
                                 
@@ -519,7 +730,7 @@ class MainWindow(QMainWindow):
     def create_bids_directory(self):
         logging.info("update_bids!")
 
-        bids_dir = str(QFileDialog.getExistingDirectory(self, "Create new BIDS Directory"))
+        bids_dir = str(QFileDialog.getExistingDirectory(self, "Create new BIDS Directory", options=QFileDialog.DontUseNativeDialog))
         if os.path.isdir(bids_dir):
             self.bids_dir = bids_dir
             self.bids = BIDSHandler(root_dir=self.bids_dir)
@@ -535,6 +746,7 @@ class MainWindow(QMainWindow):
             self.bids_actions.update_bids(self)
 
             self.viewer = DefaultViewer(self)
+            # self.work_in_progress = WorkInProgress(self)
 
             self.layout.deleteLater()
             self.window.deleteLater()
@@ -545,6 +757,7 @@ class MainWindow(QMainWindow):
             self.layout.addWidget(self.bids_metadata, 1, 1)
             self.layout.addWidget(self.bids_actions, 1, 2)
             self.layout.addWidget(self.viewer, 2, 1, 1, 2)
+            self.layout.addWidget(self.work_in_progress, 3, 1, 1, 2)
             self.window = QWidget(self)
             self.setCentralWidget(self.window)
             self.window.setLayout(self.layout)
@@ -563,7 +776,7 @@ class MainWindow(QMainWindow):
         """
         logging.info("update_bids!")
 
-        bids_dir = str(QFileDialog.getExistingDirectory(self, "Select BIDS Directory"))
+        bids_dir = str(QFileDialog.getExistingDirectory(self, "Select BIDS Directory", options=QFileDialog.DontUseNativeDialog))
         if os.path.isdir(bids_dir):
             self.bids_dir = bids_dir
             self.bids = BIDSHandler(root_dir=self.bids_dir)
@@ -589,6 +802,7 @@ class MainWindow(QMainWindow):
             self.layout.addWidget(self.bids_metadata, 1, 1)
             self.layout.addWidget(self.bids_actions, 1, 2)
             self.layout.addWidget(self.viewer, 2, 1, 1, 2)
+            self.layout.addWidget(self.work_in_progress, 3, 1, 1, 2)
             self.window = QWidget(self)
             self.setCentralWidget(self.window)
             self.window.setLayout(self.layout)
@@ -634,7 +848,92 @@ class MainWindow(QMainWindow):
         
     def launch_bids_apps(self):
         pass
+        
+        
+class PreferencesWindow(QDialog):
+    """
+    """
+    
+    def __init__(self, parent, memory):
+        super().__init__()
+        self.setWindowTitle("Preferences")
+        self.resize(800, 500)
+        self.parent = parent
+        self.memory = memory
 
+        # Main layout
+        main_layout = QVBoxLayout()
+
+        # Create a scrollable area in case there are many keys
+        scroll_area = QScrollArea()
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout()
+
+        # Create one row for each key in the dictionary
+        self.key_widgets = {}  # Dictionary to store widgets for easy access
+        for key, value in self.memory.items():
+            # Create widgets for each key
+            row_layout = QHBoxLayout()
+            label = QLabel(key)
+            line_edit = QLineEdit()
+            line_edit.setPlaceholderText(value)
+            browse_button = QPushButton("Browse")
+
+            # Store QLineEdit in the dictionary
+            self.key_widgets[key] = line_edit
+
+            # Connect the browse button to a file dialog function
+            browse_button.clicked.connect(lambda checked, k=key: self.browse_file(k))
+
+            # Add widgets to row layout
+            row_layout.addWidget(label)
+            row_layout.addWidget(line_edit)
+            row_layout.addWidget(browse_button)
+
+            # Add row layout to the main layout
+            scroll_layout.addLayout(row_layout)
+
+        scroll_widget.setLayout(scroll_layout)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(scroll_widget)
+
+        # Add scroll area to the main layout
+        main_layout.addWidget(scroll_area)
+
+        # Add Apply and Quit buttons at the bottom
+        button_layout = QHBoxLayout()
+        apply_button = QPushButton("Apply")
+        quit_button = QPushButton("Quit")
+
+        # Connect buttons to their functions
+        apply_button.clicked.connect(self.apply_changes)
+        quit_button.clicked.connect(self.close)
+
+        button_layout.addWidget(apply_button)
+        button_layout.addWidget(quit_button)
+
+        # Add the button layout to the main layout
+        main_layout.addLayout(button_layout)
+        self.setLayout(main_layout)
+
+    def browse_file(self, key):
+        # Open a file dialog to select a file
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Application Path", options=QFileDialog.DontUseNativeDialog)
+        if file_path:
+            # Update the QLineEdit placeholder text with the selected file path
+            self.key_widgets[key].setPlaceholderText(file_path)
+
+    def apply_changes(self):
+        # Update the data dictionary with values from QLineEdits
+        for key, line_edit in self.key_widgets.items():
+            text = line_edit.text()
+            if text:  # Only update if there is a new text entered
+                self.memory[key] = text
+            else:
+                self.memory[key] = line_edit.placeholderText()
+        # Optionally, save the updated data back to the file here
+        print("Preferences updated.")
+    
 
 
 # =============================================================================
@@ -689,23 +988,41 @@ class AddNewPipelinesWindow(QMainWindow):
         
         self.setCentralWidget(scroll_area)
         
-    def get_github_repositories(self):
-        url = 'https://github.com/orgs/BMAT-Apps/repositories'
-        html = requests.get(url)
-        soup = BeautifulSoup(html.content, 'html5lib')
+    # def get_github_repositories(self):
+    #     url = 'https://github.com/orgs/BMAT-Apps/repositories'
+    #     html = requests.get(url)
+    #     soup = BeautifulSoup(html.content, 'html5lib')
         
-        # Find all repositories
-        repos = soup.find('div', {'class':'org-repos repo-list'})        
-        list_repos = [item for item in repos.findAll('div', {'class':'flex-auto', 'data-view-component':True})]
+    #     # Find all repositories
+    #     repos = soup.find('div', {'class':'org-repos repo-list'})        
+    #     list_repos = [item for item in repos.findAll('div', {'class':'flex-auto', 'data-view-component':True})]
         
-        repos_dic = []
-        for repo in list_repos:
-            rep = {}
-            rep['Name'] = repo.h3.a.text.strip()
-            rep['href'] = repo.h3.a['href']
-            rep['desc'] = repo.p.text.strip()
-            repos_dic.append(rep)
+    #     repos_dic = []
+    #     for repo in list_repos:
+    #         rep = {}
+    #         rep['Name'] = repo.h3.a.text.strip()
+    #         rep['href'] = repo.h3.a['href']
+    #         rep['desc'] = repo.p.text.strip()
+    #         repos_dic.append(rep)
             
+    #     return repos_dic
+    def get_github_repositories(self):
+        url = 'https://api.github.com/orgs/BMAT-Apps/repos'
+        response = requests.get(url)
+        data = response.json()
+        repos_dic = []
+        for repo in data:
+            rep = {
+                'Name': repo['name'],
+                'href': repo['html_url'],
+                'desc': repo['description'] if repo['description'] else 'No description',
+                'stars': repo['stargazers_count'],
+                'forks': repo['forks_count'],
+                'issues': repo['open_issues_count'],
+                'language': repo['language'] if repo['language'] else 'N/A',
+                'last_updated': repo['updated_at']
+            }
+            repos_dic.append(rep)
         return repos_dic
             
 
@@ -965,19 +1282,19 @@ class AddUpdatePipelineWindow(QMainWindow):
             
         self.window = QWidget()
         
-        self.git_working_gif = QMovie('Pictures/roll_load.gif')
+        self.git_working_gif = QMovie(pjoin(get_executable_path(), 'Pictures', 'roll_load.gif'))
         self.git_working_gif.setScaledSize(QSize(25,25))
         
-        self.python_working_gif = QMovie('Pictures/roll_load.gif')
+        self.python_working_gif = QMovie(pjoin(get_executable_path(), 'Pictures', 'roll_load.gif'))
         self.python_working_gif.setScaledSize(QSize(25,25))
         
-        self.docker_working_gif = QMovie('Pictures/roll_load.gif')
+        self.docker_working_gif = QMovie(pjoin(get_executable_path(), 'Pictures', 'roll_load.gif'))
         self.docker_working_gif.setScaledSize(QSize(25,25))
         
-        self.working_gif = QMovie('Pictures/roll_load.gif')
+        self.working_gif = QMovie(pjoin(get_executable_path(), 'Pictures', 'roll_load.gif'))
         self.working_gif.setScaledSize(QSize(25,25))
         
-        self.check_icon = QPixmap('Pictures/check.png')
+        self.check_icon = QPixmap(pjoin(get_executable_path(), 'Pictures', 'check.png'))
         self.check_icon = self.check_icon.scaled(QSize(20,20))
         
         git_lab = QLabel('Git')
@@ -1118,14 +1435,14 @@ class BIDSQualityControlWindow(QMainWindow):
         self.errors_label.setFont(QFont('Calibri', 15))
         self.errors_label.setStyleSheet("color:red")
         self.errors_details_button = QPushButton('Details')
-        self.errors_details_button.setIcon(QIcon(pjoin('Pictures', 'plus.png')))
+        self.errors_details_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'plus.png')))
         self.errors_details_button.clicked.connect(self.errors_details)
 
         self.warnings_label = QLabel(f'Your BIDS directory contains {len(self.warnings)} Warnings !')
         self.warnings_label.setFont(QFont('Calibri', 15))
         self.warnings_label.setStyleSheet("color:orange")
         self.warnings_details_button = QPushButton('Details')
-        self.warnings_details_button.setIcon(QIcon(pjoin('Pictures', 'plus.png')))
+        self.warnings_details_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'plus.png')))
         self.warnings_details_button.clicked.connect(self.warnings_details)
 
         self.layout = QGridLayout()
@@ -1154,11 +1471,11 @@ class BIDSQualityControlWindow(QMainWindow):
         self.warnings_label.setFont(QFont('Calibri', 15))
         self.warnings_label.setStyleSheet("color:orange")
         self.warnings_details_button = QPushButton('Details')
-        self.warnings_details_button.setIcon(QIcon(pjoin('Pictures', 'plus.png')))
+        self.warnings_details_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'plus.png')))
         self.warnings_details_button.clicked.connect(self.warnings_details)
 
         self.minus_errors_button = QPushButton()
-        self.minus_errors_button.setIcon(QIcon(pjoin('Pictures', 'minus.png')))
+        self.minus_errors_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'minus.png')))
         self.minus_errors_button.clicked.connect(self.init_ui)
 
         for error in self.errors:
@@ -1206,11 +1523,11 @@ class BIDSQualityControlWindow(QMainWindow):
         self.errors_label.setFont(QFont('Calibri', 15))
         self.errors_label.setStyleSheet("color:red")
         self.errors_details_button = QPushButton('Details')
-        self.errors_details_button.setIcon(QIcon(pjoin('Pictures', 'plus.png')))
+        self.errors_details_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'plus.png')))
         self.errors_details_button.clicked.connect(self.errors_details)
 
         self.minus_warnings_button = QPushButton()
-        self.minus_warnings_button.setIcon(QIcon(pjoin('Pictures', 'minus.png')))
+        self.minus_warnings_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'minus.png')))
         self.minus_warnings_button.clicked.connect(self.init_ui)
 
         for warning in self.warnings:
@@ -1298,7 +1615,7 @@ class WorkInProgress(QWidget):
         self.setMinimumSize(700, 50)
         
         self.working_lab = QLabel(self)
-        self.working_gif = QMovie('Pictures/loading_inf.gif')
+        self.working_gif = QMovie(pjoin(get_executable_path(), 'Pictures', 'loading_inf.gif'))
         self.working_gif.setScaledSize(QSize(40,40))
         # self.working_lab.setMovie(self.working_gif)
         # self.working_gif.start()
@@ -1315,16 +1632,23 @@ class WorkInProgress(QWidget):
         layout.addWidget(self.working_lab)
         layout.addWidget(self.working_details_lab)
         self.setLayout(layout)
-        
-    def update_work_in_progress(self,in_progress):
+    
+    @pyqtSlot(tuple)
+    def update_work_in_progress(self, in_progress):
         if in_progress[1]:
             self.working_details.append(in_progress[0])
         else:
             self.working_details.remove(in_progress[0])
-        self.update_animation()
+        # self.update_animation()
+        QMetaObject.invokeMethod(self, "update_animation", Qt.QueuedConnection)
     
     
+    @pyqtSlot()
     def update_animation(self):
+        if not self.working_lab:
+            print('working label does not exists')
+            return
+        
         if self.working_details == []:
             self.working_gif.stop()
             self.working_lab.clear()
@@ -1597,7 +1921,7 @@ class BidsDirView(QWidget):
         elif any(['.nii' in item_path, '.nii.gz' in item_path]):
             self.itksnap = self.parent.memory.get('itksnap')
             if self.itksnap == None:
-                self.itksnap = QFileDialog.getOpenFileName(self, "Select the path to itksnap")[0]
+                self.itksnap = QFileDialog.getOpenFileName(self, "Select the path to itksnap", options=QFileDialog.DontUseNativeDialog)[0]
                 if self.itksnap != None and self.itksnap != '':
                     self.threads.append(QThread())
                     self.operation = SubprocessWorker(f'"{self.itksnap}" -g {item_path}')
@@ -1670,7 +1994,7 @@ class BidsDirView(QWidget):
 
         if action == openWith:
             logging.debug('Open With')
-            self.itksnap = QFileDialog.getOpenFileName(self, "Select the path to itksnap")[0]
+            self.itksnap = QFileDialog.getOpenFileName(self, "Select the path to itksnap", options=QFileDialog.DontUseNativeDialog)[0]
             if self.itksnap != None and self.itksnap != '':
                 self.threads.append(QThread())
                 self.operation = SubprocessWorker(f'"{self.itksnap}" -g {item_path}')
@@ -1885,17 +2209,148 @@ class BidsActions(QWidget):
         None.
 
         """
-        logging.info("add")
-        if hasattr(self, 'add_win'):
-            del self.add_win
-        self.add_win = AddWindow(self)
-        if not self.parent.dcm2niix_path:
-            # ajouter une fenetre
-            path = QFileDialog.getOpenFileName(self, "Select 'dcm2niix.exe' path")[0]
-            self.parent.dcm2niix_path = path
-            # self.parent.memory['dcm2niix_path'] = path
-            self.bids.setDicom2niixPath(self.parent.dcm2niix_path)
-        self.add_win.show()
+        class ActionDialog(QDialog):
+            def __init__(self, parent=None):
+                super().__init__(parent)
+                # self.parent = parent
+                # self.bids = self.parent.bids
+                self.initUI()
+                
+            def initUI(self):
+                self.setWindowTitle('Choose Action')
+                label = QLabel('Do you want to perform the conversion locally or the SSS server?', self)
+                
+                local_button = QPushButton('Locally', self)
+                local_button.clicked.connect(self.performLocally)
+                
+                remote_button = QPushButton('SSS Server', self)
+                remote_button.clicked.connect(self.performOnRemote)
+                
+                layout = QVBoxLayout()
+                layout.addWidget(label)
+                layout_button = QHBoxLayout()
+                layout_button.addWidget(local_button)
+                layout_button.addWidget(remote_button)
+                layout.addLayout(layout_button)
+                
+                self.setLayout(layout)
+                
+            def performLocally(self):
+                print('Performing action locally...')
+                self.result = 'locally'
+                self.accept()
+                
+                # logging.info("add")
+                # if hasattr(self, 'add_win'):
+                #     del self.add_win
+                # print('test')
+                # self.add_win = AddWindow(self.parent)
+                # print('creation of the add window')
+                # if not self.parent.parent.dcm2niix_path:
+                #     print('no dcm2niix path')
+                #     # ajouter une fenetre
+                #     path = QFileDialog.getOpenFileName(self, "Select 'dcm2niix.exe' path", options=QFileDialog.DontUseNativeDialog)[0]
+                #     self.parent.parent.dcm2niix_path = path
+                #     # self.parent.memory['dcm2niix_path'] = path
+                #     self.bids.setDicom2niixPath(self.parent.parent.dcm2niix_path)
+                # self.add_win.show()
+                # print('show window')
+                # self.close()
+                # print('hide qfiledialog')
+                
+            def performOnRemote(self):
+                print('Performing action on remote server...')
+                self.result = 'remote'
+                self.accept()
+                
+                # logging.info("add")
+                # if hasattr(self, 'add_win_server'):
+                #     del self.add_win_server
+                # self.add_win_server = AddServerWindow(self.parent)
+                # self.add_win_server.show()
+                # self.hide()
+        
+        # check if server info completed in json
+        server_info = get_server_info()
+        if server_info == None:
+            print('server_info == None')
+            if hasattr(self, 'add_win'):
+                del self.add_win
+            self.add_win = AddWindow(self)
+            if not self.parent.memory.get('dcm2niix_path'):
+                print('no dcm2niix path')
+                # ajouter une fenetre
+                path = QFileDialog.getOpenFileName(self, "Select 'dcm2niix.exe' path", options=QFileDialog.DontUseNativeDialog)[0]
+                if path != None and path != '' and pexists(path):
+                    self.parent.memory['dcm2niix_path'] = path
+                    # self.parent.memory['dcm2niix_path'] = path
+                    self.bids.setDicom2niixPath(self.parent.memory.get('dcm2niix_path'))
+                    self.parent.memory['dcm2niix_path'] = path
+            self.add_win.show()
+            print('show window')
+        elif server_info.get('server') == None or server_info.get('server') == "":
+            print('server_info.get(server) == None')
+            if hasattr(self, 'add_win'):
+                del self.add_win
+            self.add_win = AddWindow(self)
+            if not self.parent.memory.get('dcm2niix_path'):
+                print('no dcm2niix path')
+                # ajouter une fenetre
+                path = QFileDialog.getOpenFileName(self, "Select 'dcm2niix.exe' path", options=QFileDialog.DontUseNativeDialog)[0]
+                if path != None and path != '' and pexists(path):
+                    self.parent.memory['dcm2niix_path'] = path
+                    # self.parent.memory['dcm2niix_path'] = path
+                    self.bids.setDicom2niixPath(self.parent.memory.get('dcm2niix_path'))
+                    self.parent.memory['dcm2niix_path'] = path
+            self.add_win.show()
+            print('show window')
+        elif server_info.get('server').get('host') == None or server_info.get('server').get('host') == "":
+            print('server_info.get(server).get(host) == None')
+            if hasattr(self, 'add_win'):
+                del self.add_win
+            self.add_win = AddWindow(self)
+            if not self.parent.memory.get('dcm2niix_path'):
+                print('no dcm2niix path')
+                # ajouter une fenetre
+                path = QFileDialog.getOpenFileName(self, "Select 'dcm2niix.exe' path", options=QFileDialog.DontUseNativeDialog)[0]
+                if path != None and path != '' and pexists(path):
+                    self.parent.memory['dcm2niix_path'] = path
+                    # self.parent.memory['dcm2niix_path'] = path
+                    self.bids.setDicom2niixPath(self.parent.memory.get('dcm2niix_path'))
+                    self.parent.memory['dcm2niix_path'] = path
+            self.add_win.show()
+            print('show window')
+        else:        
+            dialog = ActionDialog(self)
+            if dialog.exec_() == QDialog.Accepted:
+                result = dialog.result
+                print(result)
+                
+                if result == 'locally':
+                    if hasattr(self, 'add_win'):
+                        del self.add_win
+                    self.add_win = AddWindow(self)
+                    if not self.parent.memory.get('dcm2niix_path'):
+                        print('no dcm2niix path')
+                        # ajouter une fenetre
+                        path = QFileDialog.getOpenFileName(self, "Select 'dcm2niix.exe' path", options=QFileDialog.DontUseNativeDialog)[0]
+                        if path != None and path != '' and pexists(path):
+                            self.parent.memory['dcm2niix_path'] = path
+                            # self.parent.memory['dcm2niix_path'] = path
+                            self.bids.setDicom2niixPath(self.parent.memory.get('dcm2niix_path'))
+                            self.parent.memory['dcm2niix_path'] = path
+                    self.add_win.show()
+                    print('show window')
+                    # self.hide()
+                    print('hide qdialog')
+                
+                elif result == 'remote':
+                    print("add")
+                    if hasattr(self, 'add_win_server'):
+                        del self.add_win_server
+                    self.add_win_server = AddServerWindow(self.parent)
+                    self.add_win_server.show()
+                    # self.hide()
 
 
     def remove(self):
@@ -2259,7 +2714,7 @@ class AddWindow(QMainWindow):
         None.
 
         """
-        dicom_folder = str(QFileDialog.getExistingDirectory(self, "Select DICOM folder"))
+        dicom_folder = str(QFileDialog.getExistingDirectory(self, "Select DICOM folder", options=QFileDialog.DontUseNativeDialog))
         rowPosition = len(self.list_to_add)
         self.list_view.insertRow(rowPosition)
         self.list_view.setItem(rowPosition , 0, QTableWidgetItem(dicom_folder))
@@ -2276,7 +2731,7 @@ class AddWindow(QMainWindow):
         None.
 
         """
-        dicom_folder = QFileDialog.getOpenFileName(self, 'Select DICOM zip file')[0]
+        dicom_folder = QFileDialog.getOpenFileName(self, 'Select DICOM zip file', options=QFileDialog.DontUseNativeDialog)[0]
         rowPosition = len(self.list_to_add)
         self.list_view.insertRow(rowPosition)
         self.list_view.setItem(rowPosition , 0, QTableWidgetItem(dicom_folder))
@@ -2304,6 +2759,7 @@ class AddWindow(QMainWindow):
         self.thread.started.connect(self.worker.run)
         self.worker.in_progress.connect(self.is_in_progress)
         self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.cleanup_thread)
         self.worker.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
         self.thread.finished.connect(lambda: self.end_add())
@@ -2314,6 +2770,22 @@ class AddWindow(QMainWindow):
     
     def is_in_progress(self, in_progress):
         self.parent.parent.work_in_progress.update_work_in_progress(in_progress)
+        
+    @pyqtSlot()
+    def cleanup_thread(self):
+        # Wait for the thread to finish
+        self.thread.wait()
+
+    def closeEvent(self, event):
+        # Ensure the thread is properly shut down before the widget is closed
+        if hasattr(self, 'thread'):
+            print('self has thread attr')
+            try:
+                self.thread.quit()
+                self.thread.wait()
+            except AttributeError:
+                print('[Warning] attribute error')
+        event.accept()  # Accept the close event
     
 
     def end_add(self):
@@ -2343,6 +2815,352 @@ class AddWindow(QMainWindow):
         cp = QDesktopWidget().availableGeometry().center()
         qr.moveCenter(cp)
         self.move(qr.topLeft())
+        
+    
+        
+class AddServerWindow(QMainWindow):
+    """
+    """
+    
+
+    def __init__(self, parent):
+        """
+        
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+
+        self.setWindowTitle("Add MRI session on SSS cluster")
+        self.window = QWidget(self)
+        self.setCentralWidget(self.window)
+        self.center()
+        
+        # get job_info
+        path = get_executable_path()
+        if not pexists(pjoin(path, 'dcm2bids_sss.json')):
+            print('[ERROR] dcm2bids_sss.json file not found')
+        
+        self.job_json = None
+        with open(pjoin(path, 'dcm2bids_sss.json'), 'r') as f:
+            self.job_json = json.load(f)
+        
+        self.tabs = QTabWidget(self)
+        
+        self.main_tab = AddServerTab(self)
+        self.job_tab = JobTab(self, self.job_json.get("slurm_infos"))
+        
+        self.tabs.addTab(self.main_tab, "Main")
+        self.tabs.addTab(self.job_tab, "Slurm Job")
+        
+        layout = QVBoxLayout()
+        layout.addWidget(self.tabs)
+
+        self.window.setLayout(layout)
+
+
+    def center(self):
+        """
+        
+
+        Returns
+        -------
+        None.
+
+        """
+        qr = self.frameGeometry()
+        cp = QDesktopWidget().availableGeometry().center()
+        qr.moveCenter(cp)
+        self.move(qr.topLeft())
+
+    
+        
+# =============================================================================
+# AddWindow
+# =============================================================================
+class AddServerTab(QWidget):
+    """
+    """
+
+
+    def __init__(self, parent):
+        """
+
+
+        Parameters
+        ----------
+        parent : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.parent = parent
+        self.bids = self.parent.bids
+        # self.threads_pool = self.parent.threads_pool
+        
+        self.job_json = self.parent.job_json
+
+        self.list_to_add = []
+
+        self.label = QLabel("Select DICOM zip file to add to BIDS directory")
+        self.label.setAlignment(Qt.AlignHCenter)
+
+        # self.add_folder_button = QPushButton("Add DICOM Folder")
+        # self.add_folder_button.clicked.connect(self.add_folder)
+        self.checkbox = QCheckBox('ISO format', self)
+        self.checkbox.stateChanged.connect(self.on_state_changed)
+        self.iso = False
+        self.add_files_button = QPushButton("Add DICOM zip Files")
+        self.add_files_button.clicked.connect(self.add_files)
+        self.list_view = QTableWidget()
+        self.list_view.setMinimumSize(800,200)
+        self.list_view.setColumnCount(3)
+        self.list_view.setColumnWidth(0, 600)
+        self.list_view.setColumnWidth(1, 100)
+        self.list_view.setColumnWidth(2, 100)
+        self.list_view.setAlternatingRowColors(True)
+        self.list_view.setHorizontalHeaderLabels(["path", "subject", "session"])
+        self.add_button = QPushButton("Add to BIDS directory")
+        self.add_button.clicked.connect(self.add)
+
+        layout = QGridLayout()
+        layout.addWidget(self.label, 0, 0, 1, 2)
+        layout.addWidget(self.add_files_button, 1, 0, 1, 1)
+        layout.addWidget(self.checkbox, 1, 1, 1, 1, Qt.AlignRight)
+        layout.addWidget(self.list_view, 2, 0, 1, 2)
+        layout.addWidget(self.add_button, 3, 0, 1, 2)
+
+        self.setLayout(layout)
+
+
+    def on_state_changed(self, state):
+        if state == Qt.Checked:
+            self.iso = True
+        else:
+            self.iso = False
+
+
+    def add_files(self):
+        """
+
+
+        Returns
+        -------
+        None.
+
+        """
+        dicom_folder = QFileDialog.getOpenFileName(self, 'Select DICOM zip file', options=QFileDialog.DontUseNativeDialog)[0]
+        if dicom_folder == None or dicom_folder == '':
+            return
+        rowPosition = len(self.list_to_add)
+        self.list_view.insertRow(rowPosition)
+        self.list_view.setItem(rowPosition , 0, QTableWidgetItem(dicom_folder))
+        self.list_view.setItem(rowPosition , 1, QTableWidgetItem(None))
+        self.list_view.setItem(rowPosition , 2, QTableWidgetItem(None))
+
+
+    def add(self):
+        """
+
+
+        Returns
+        -------
+        None.
+
+        """
+        self.job_json["slurm_infos"] = self.parent.job_tab.get_slurm_job_info()
+        
+        def getPassword():
+            password, ok = QInputDialog.getText(self, "SSH Key Passphrase", "Unlocking SSH key with passphrase?", 
+                                    QLineEdit.Password)
+            passphrase = None
+            if ok and password:
+                passphrase = password
+            return passphrase
+        
+        passphrase = getPassword()
+        
+        #get items
+        for i in range(self.list_view.rowCount()):
+            self.list_to_add.append((self.list_view.item(i,0).text(), self.list_view.item(i,1).text() if self.list_view.item(i,1).text() != '' else None, self.list_view.item(i,2).text() if self.list_view.item(i,2).text() != '' else None))
+
+        # self.parent.setEnabled(False)
+        # self.thread = QThread()
+        # self.worker = AddServerWorker(self.bids, self.list_to_add, self.iso, self.job_json, passphrase=passphrase)
+        # self.worker.moveToThread(self.thread)
+        # self.thread.started.connect(self.worker.run)
+        # self.worker.in_progress.connect(self.is_in_progress)
+        # self.worker.error.connect(self.error_handler)
+        # self.worker.jobs_submitted.connect(self.submitted_jobs)
+        # self.worker.finished.connect(self.thread.quit)
+        # self.worker.finished.connect(self.worker.deleteLater)
+        # self.thread.finished.connect(self.thread.deleteLater)
+        # self.thread.finished.connect(lambda: self.end_add())
+        # self.thread.start()
+        
+        # Do the job here and not in a thread 
+        self.is_in_progress(('AddServer', True))
+        jobs_id = []
+            
+        for item in self.list_to_add:
+
+            dicom = item[0]
+
+            if not ".zip" in dicom:
+                print ('Not a zip file')
+                return 
+    
+            dicom_file = dicom
+            sub = item[1]
+            ses = item[2]
+                
+            try:
+                args = [dicom_file]
+                if self.iso:
+                    args.append('-iso')
+                job_id = submit_job(self.bids.root_dir, sub, ses, self.job_json, args=args, use_asyncssh=True, passphrase=passphrase, check_if_exist=False)
+                # job_id = ['Submitted batch job 2447621']
+                if job_id is not None and job_id != []:
+                    jobs_id.append(*job_id)
+    
+            except Exception as e:
+                self.error_handler(e)
+        
+        self.is_in_progress(('AddServer', False))
+        self.submitted_jobs(jobs_id)
+    
+    def is_in_progress(self, in_progress):
+        self.parent.parent.work_in_progress.update_work_in_progress(in_progress)
+        
+    
+    def error_handler(self, exception):
+        QMessageBox.critical(self, type(exception).__name__, str(exception))
+        
+    def submitted_jobs(self, jobs_id):
+        print('submitted jobs')
+        class SubmittedJobsDialog(QDialog):
+            def __init__(self, results, parent=None):
+                super().__init__()
+        
+                self.setWindowTitle('Jobs Submitted')
+                self.setGeometry(300, 300, 400, 300)
+                
+                layout = QVBoxLayout(self)
+                
+                # Create and populate the QListWidget
+                self.listWidget = QListWidget(self)
+                for result in results:
+                    self.listWidget.addItem(result)
+                
+                layout.addWidget(self.listWidget)
+        
+                # Create OK button
+                self.okButton = QPushButton('OK', self)
+                self.okButton.clicked.connect(self.accept)
+                
+                # Add OK button to layout
+                buttonLayout = QHBoxLayout()
+                buttonLayout.addStretch()
+                buttonLayout.addWidget(self.okButton)
+                
+                layout.addLayout(buttonLayout)
+                
+        job_dialog = SubmittedJobsDialog(jobs_id)
+        # job_submitted_window = QMainWindow()
+        # job_submitted_window.setCentralWidget(job_dialog)
+        job_dialog.exec_()
+    
+
+    def end_add(self):
+        """
+
+
+        Returns
+        -------
+        None.
+
+        """
+        self.parent.parent.bids_metadata.update_metadata()
+        logging.info(f'All done.')
+        self.parent.setEnabled(True)
+
+
+    def center(self):
+        """
+
+
+        Returns
+        -------
+        None.
+
+        """
+        qr = self.frameGeometry()
+        cp = QDesktopWidget().availableGeometry().center()
+        qr.moveCenter(cp)
+        self.move(qr.topLeft())
+        
+        
+        
+class JobTab(QWidget):
+    """
+    """
+    
+    def __init__(self, parent, slurm_infos):
+        """
+        
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        
+        self.parent = parent
+        self.bids = self.parent.bids
+        self.slurm_info = slurm_infos
+        self.setMinimumSize(500, 200)
+        self.slurm_info_input = {}
+        layout = QVBoxLayout()
+        for key in self.slurm_info.keys():
+            key_label = QLabel(key)
+            key_input = QLineEdit(self)
+            key_input.setPlaceholderText(self.slurm_info[key])
+            key_layout = QHBoxLayout()
+            self.slurm_info_input[f'{key}_input'] = key_input
+            key_layout.addWidget(key_label)
+            key_layout.addWidget(key_input)
+            layout.addLayout(key_layout)
+            
+        self.setLayout(layout)
+            
+            
+    def get_slurm_job_info(self):
+        
+        slurm_job_info = {}
+        for key in self.slurm_info.keys():
+            key_text = self.slurm_info_input[f'{key}_input'].text()
+            if key_text == None or key_text == "":
+                key_text = self.slurm_info_input[f'{key}_input'].placeholderText()
+                
+            slurm_job_info[key] = key_text
+        
+        return slurm_job_info
+        
 
 
 # =============================================================================
@@ -2382,13 +3200,13 @@ class Rename(QMainWindow):
         self.tab1 = RenameSubject(self)
 
         # Tab 2
-        self.tab2 = RenameSession(self)
+        # self.tab2 = RenameSession(self)
 
         # Tab 3
         self.tab3 = RenameSequence(self)
 
         self.tabs.addTab(self.tab1, "Subject")
-        self.tabs.addTab(self.tab2, "Session")
+        # self.tabs.addTab(self.tab2, "Session")
         self.tabs.addTab(self.tab3, "Sequence")
 
         # self.registration = TransformationTab(self)
@@ -2450,15 +3268,21 @@ class RenameSubject(QMainWindow):
 
         self.old_sub = QLineEdit(self)
         self.old_sub.setPlaceholderText("Old Subject ID")
+        self.old_ses = QLineEdit(self)
+        self.old_ses.setPlaceholderText("Old Session ID")
         self.new_sub = QLineEdit(self)
         self.new_sub.setPlaceholderText("New Subject ID")
+        self.new_ses = QLineEdit(self)
+        self.new_ses.setPlaceholderText("New Session ID")
         self.rename_button = QPushButton("Rename Subject")
         self.rename_button.clicked.connect(self.rename)
 
         layout = QGridLayout()
         layout.addWidget(self.old_sub, 0, 0, 1, 1)
         layout.addWidget(self.new_sub, 0, 1, 1, 1)
-        layout.addWidget(self.rename_button, 1, 0, 1, 2)
+        layout.addWidget(self.old_ses, 1, 0, 1, 1)
+        layout.addWidget(self.new_ses, 1, 1, 1, 1)
+        layout.addWidget(self.rename_button, 2, 0, 1, 2)
 
         self.window.setLayout(layout)
 
@@ -2472,12 +3296,15 @@ class RenameSubject(QMainWindow):
         None.
 
         """
+        print('rename subject')
         old_sub = self.old_sub.text()
+        old_ses = self.old_ses.text()
         new_sub = self.new_sub.text()
+        new_ses = self.new_ses.text()
 
         self.parent.setEnabled(False)
         self.thread = QThread()
-        self.operation = OperationWorker(self.bids.rename_subject, args=[old_sub, new_sub])
+        self.operation = OperationWorker(self.bids.rename_subject, args=[old_sub, old_ses, new_sub, new_ses])
         self.operation.moveToThread(self.thread)
         self.thread.started.connect(self.operation.run)
         self.operation.in_progress.connect(self.is_in_progress)
@@ -2488,9 +3315,9 @@ class RenameSubject(QMainWindow):
         self.thread.finished.connect(
             lambda: self.parent.setEnabled(True)
         )
-        logging.info(f"sub-{old_sub} renamed to sub-{new_sub}")
+        print(f"sub-{old_sub} renamed to sub-{new_sub}")
 
-        self.hide()
+        self.parent.hide()
         
         
     def is_in_progress(self, in_progress):
@@ -2686,7 +3513,7 @@ class RenameSequence(QMainWindow):
         )
         logging.info(f"old {old_seq} renamed to new {new_seq}")
 
-        self.hide()
+        self.parent.hide()
         
         
     def is_in_progress(self, in_progress):
@@ -3745,15 +4572,15 @@ class Table_Viewer(QWidget):
         self.label.setMinimumWidth(500)
         self.label.setFont(QFont('Calibri', 15))
         self.edit_button = QPushButton('Edit')
-        self.edit_button.setIcon(QIcon(pjoin('Pictures', 'edit.png')))
+        self.edit_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'edit.png')))
         self.edit_button.adjustSize()
         self.edit_button.clicked.connect(self.edit)
         self.save_button = QPushButton('Save')
-        self.save_button.setIcon(QIcon(pjoin('Pictures', 'save.png')))
+        self.save_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'save.png')))
         self.save_button.adjustSize()
         self.save_button.clicked.connect(self.save)
         self.close_button = QPushButton('Close')
-        self.close_button.setIcon(QIcon(pjoin('Pictures', 'close.png')))
+        self.close_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'close.png')))
         self.close_button.adjustSize()
         self.close_button.clicked.connect(self.close)
 
@@ -3884,19 +4711,19 @@ class ParticipantsTSV_Viewer(QWidget):
         self.label.setMinimumWidth(500)
         self.label.setFont(QFont('Calibri', 15))
         self.edit_button = QPushButton('Edit')
-        self.edit_button.setIcon(QIcon(pjoin('Pictures', 'edit.png')))
+        self.edit_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'edit.png')))
         self.edit_button.adjustSize()
         self.edit_button.clicked.connect(self.edit)
         self.save_button = QPushButton('Save')
-        self.save_button.setIcon(QIcon(pjoin('Pictures', 'save.png')))
+        self.save_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'save.png')))
         self.save_button.adjustSize()
         self.save_button.clicked.connect(self.save)
         self.plus_button = QPushButton('Add')
-        self.plus_button.setIcon(QIcon(pjoin('Pictures', 'plus.png')))
+        self.plus_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'plus.png')))
         self.plus_button.adjustSize()
         self.plus_button.clicked.connect(self.add_item)
         self.close_button = QPushButton('Close')
-        self.close_button.setIcon(QIcon(pjoin('Pictures', 'close.png')))
+        self.close_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'close.png')))
         self.close_button.adjustSize()
         self.close_button.clicked.connect(self.close)
 
@@ -4142,15 +4969,15 @@ class TextViewer(QWidget):
         self.label.setMinimumWidth(500)
         self.label.setFont(QFont('Calibri', 15))
         self.edit_button = QPushButton('Edit')
-        self.edit_button.setIcon(QIcon(pjoin('Pictures', 'edit.png')))
+        self.edit_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'edit.png')))
         self.edit_button.adjustSize
         self.edit_button.clicked.connect(self.edit)
         self.save_button = QPushButton('Save')
-        self.save_button.setIcon(QIcon(pjoin('Pictures', 'save.png')))
+        self.save_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'save.png')))
         self.save_button.adjustSize
         self.save_button.clicked.connect(self.save)
         self.close_button = QPushButton('Close')
-        self.close_button.setIcon(QIcon(pjoin('Pictures', 'close.png')))
+        self.close_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'close.png')))
         self.close_button.adjustSize()
         self.close_button.clicked.connect(self.close)
 
@@ -4250,8 +5077,8 @@ class DefaultViewer(QWidget):
 
         image = QLabel(self)
         image.setAlignment(Qt.AlignCenter)
-        pixmap = QPixmap(pjoin('Pictures', 'bids_icon.png'))
-        pixmap = pixmap.scaled(700, 500, Qt.KeepAspectRatio)
+        pixmap = QPixmap(pjoin(get_executable_path(), 'Pictures', 'BMAT.png'))
+        pixmap = pixmap.scaled(self.width(), self.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
         image.setPixmap(pixmap)
 
         # # Optional, resize window to image size
@@ -4309,7 +5136,7 @@ class DefaultNiftiViewer(QWidget):
         self.label.setFont(QFont('Calibri', 15))
 
         self.close_button = QPushButton('Close')
-        self.close_button.setIcon(QIcon(pjoin('Pictures', 'close.png')))
+        self.close_button.setIcon(QIcon(pjoin(get_executable_path(), 'Pictures', 'close.png')))
         self.close_button.adjustSize()
         self.close_button.clicked.connect(self.close)
 
@@ -4486,7 +5313,8 @@ class AddPipelineWorker(QObject):
         
         if setup.get('python_requirements') != None and setup.get('python_requirements') != "":
             requirements_path = f'{pipeline_path}/{setup.get("python_requirements")}'
-            subprocess.Popen(f'pip install -r {requirements_path}', shell=True).wait()
+            # subprocess.Popen(f'pip install -r {requirements_path}', shell=True).wait()
+            install_requirements(requirements_path)
         
         self.in_progress.emit(('python requirements', False))
         
@@ -4694,11 +5522,11 @@ class AddWorker(QObject):
                 with zipfile.ZipFile(dicom, 'r') as zip_ref:
                     zip_ref.extractall(directory_to_extract_to)
                 dicom = directory_to_extract_to
-
+    
             DICOM_FOLDER = dicom
             PATIENT_ID = item[1]
             SESSION = item[2]
-
+    
             try:
                 self.bids.convert_dicoms_to_bids(dicomfolder = DICOM_FOLDER,
                                                     pat_id      = PATIENT_ID,
@@ -4707,8 +5535,91 @@ class AddWorker(QObject):
 
             except Exception as e:
                 pass
+        
+        # if ".zip" in dicom:
+        #     # upload zip onto the cluster in a /tmp folder  
+        #     pass
             
         self.in_progress.emit(('Add',False))    
+        self.finished.emit()
+        
+
+# =============================================================================
+# AddWorker
+# =============================================================================
+class AddServerWorker(QObject):
+    """
+    """
+    finished = pyqtSignal()
+    in_progress = pyqtSignal(tuple)
+    error = pyqtSignal(Exception)
+    jobs_submitted = pyqtSignal(list)
+
+    def __init__(self, bids, list_to_add, iso, job_json, passphrase=None):
+        """
+
+
+        Parameters
+        ----------
+        bids : TYPE
+            DESCRIPTION.
+        list_to_add : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        super().__init__()
+        self.bids = bids
+        self.list_to_add = list_to_add
+        self.iso = iso
+        self.job_json = job_json
+        self.passphrase = passphrase
+
+
+    def run(self):
+        """
+
+
+        Returns
+        -------
+        None.
+
+        """
+        self.in_progress.emit(('AddServer', True))
+        
+        jobs_id = []
+            
+        for item in self.list_to_add:
+
+            dicom = item[0]
+
+            if not ".zip" in dicom:
+                print ('Not a zip file')
+                return 
+    
+            dicom_file = dicom
+            sub = item[1]
+            ses = item[2]
+    
+            try:
+                args = [dicom_file]
+                if self.iso:
+                    args.append('-iso')
+                job_id = submit_job(self.bids.root_dir, sub, ses, self.job_json, args, use_asyncssh=True, passphrase=self.passphrase)
+                if job_id is not None and job_id != []:
+                    jobs_id.append(*job_id)
+    
+            except Exception as e:
+                self.error.emit(e)
+        
+        # if ".zip" in dicom:
+        #     # upload zip onto the cluster in a /tmp folder  
+        #     pass
+        self.jobs_submitted.emit(jobs_id)
+        self.in_progress.emit(('AddServer',False))    
         self.finished.emit()
 
 
