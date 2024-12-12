@@ -61,7 +61,7 @@ BMAT can be downloaded as a Compiled version from the GitHub releases on the rig
 tar -xcvf BMAT.tar.gz
 ```
 
-- MacOS: Unfortunately, due to the difficulty to develop and compile application on MacOS, BMAT is not available as a compiled application on MacOS. For Mac users, the only possibility is to download BMAT from source code (cf. [Install from source code](## Installation from source code))
+- MacOS: Unfortunately, due to the difficulty to develop and compile application on MacOS, BMAT is not available as a compiled application on MacOS. For Mac users, the only possibility is to download BMAT from source code (cf. [Install from source code](#installation-from-source-code))
 
 BMAT has a few dependencies to work properly, i.e. Git, Docker, ITK-SNAP. You will find below the description on how to install each depedencies.
 
