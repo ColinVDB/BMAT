@@ -117,8 +117,11 @@ def find_subjects_and_sessions(bids, sub, ses, check_if_exist=True):
 def is_subpath(main_path, sub_path):
     main_path = os.path.abspath(main_path)
     sub_path = os.path.abspath(sub_path)
-    common_path = os.path.commonpath([main_path, sub_path])
-    return common_path == sub_path
+    try:
+        common_path = os.path.commonpath([main_path, sub_path])
+        return common_path == sub_path
+    except ValueError:
+        return False
 
 
 def map_path(bids_path, shared_folders):
