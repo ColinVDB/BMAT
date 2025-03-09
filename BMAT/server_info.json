@@ -1,4 +1,0 @@
-{
-	"server":{"host":"host_ip_address", "user":"user_name", "key":"path_towards_ssh_key"}, 
-	"shared_folders":{"local_path1":"path1_on_the_server", "local_path2":"path2_on_the_server"}
-}
