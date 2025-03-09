@@ -202,7 +202,18 @@ The implementation of the computation part of the pipeline can use docker contai
 
 ## Server compatibility (UCLouvain/IoNS)
 
-TO DO
+Speicific for UCLouvain/IoNS members, BMAT was implemented with a possibilities to connect to the remote SSS server to access and process your data on the server. 
+
+1. First, make sure to have a SSH access to the server
+
+2. In the BMAT home directory, update the server_info.json file with your specific information:
+    * "server": 
+        * "host": IP address of the server
+        * "user": your user name
+        * "key": path towards your ssh key do connect to the server
+    * "shared_folders": list of all the connected shared samba folders on your system. This allows the program to map folder/files path on your computer to their location on the server
+
+3. Update all pipeline option file (pipeline.json) to allow running pipelines on the server via the slurm scheduler. For that, in the pipeline.json file, make sure that there is a "sss_slurm" tag in the add_info dictionnary that points towards another json file contaitning the slurm job infos (script to run, environment, modules, job ressources, etc.)
 
 ## Installation from source code
 
