@@ -9,3 +9,4 @@ BMAT/LocalPipelines/**
 !BMAT/Pipelines/.gitkeep
 !BMAT/LocalPipelines/.gitkeep
 *.lta
+BMAT/server_info.json
