@@ -3,6 +3,8 @@ BMAT/Pipelines/**
 BMAT/memory.xz
 BMAT/license.txt
 BMAT/bids_validator.json
+BMAT/sequences.csv
+BMAT/server_info.json
 BMAT/LocalPipelines/**
 .venv/
 !BMAT/Pipelines/.gitkeep
