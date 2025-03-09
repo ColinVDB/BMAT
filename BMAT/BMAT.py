@@ -116,6 +116,8 @@ try:
 except ImportError:
     from importlib_metadata import version  # For earlier versions with the backport
 
+# VERSION
+VERSION = "1.0.0"
 
 def is_compiled():
     return getattr(sys, 'frozen', False)

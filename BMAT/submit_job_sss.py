@@ -176,12 +176,18 @@ def get_job_info(job_json):
     return job_info
 
 
-def sbatch_command(bids, sub, ses, job_info, args=[]):
+def sbatch_command(bids, sub, ses, job_info, args=[], one_job=False):
+    # print(f'{job_info=}')
+    # print(f'{args=}')
         
     # add error and output in job_info
     slurm_infos = job_info["slurm_infos"]
-    slurm_infos["output"] = pjoin(job_info["log"], f"slurm-%j_{slurm_infos['job-name']}_sub-{sub}_ses-{ses}.out")
-    slurm_infos["error"] = pjoin(job_info["log"], f"slurm-%j_{slurm_infos['job-name']}_sub-{sub}_ses-{ses}.err")
+    if one_job:
+        slurm_infos["output"] = pjoin(job_info["log"], f"slurm-%j_{slurm_infos['job-name']}_one_job.out")
+        slurm_infos["error"] = pjoin(job_info["log"], f"slurm-%j_{slurm_infos['job-name']}_one_job.err")
+    else:
+        slurm_infos["output"] = pjoin(job_info["log"], f"slurm-%j_{slurm_infos['job-name']}_sub-{sub}_ses-{ses}.out")
+        slurm_infos["error"] = pjoin(job_info["log"], f"slurm-%j_{slurm_infos['job-name']}_sub-{sub}_ses-{ses}.err")
     
     # Create sbatch command
     sbatch_cmd = "sbatch "
@@ -275,6 +281,67 @@ def submit_job(bids_path, sub, ses, job_json, args=[], use_asyncssh=True, passph
     except Exception as e:
         print('Exception')
         raise ServerConnectionError(f"Server Connection error: {e}")
+        
+        
+        
+def submit_job_compose(bids_path, sub, ses, job_json, args=[], use_asyncssh=True, passphrase=None, one_job=False, check_if_exist=True):
+    
+    print('submit_job compose')
+    
+    server_info = get_server_info()
+    if server_info == None:
+        raise ServerInfoError("Problems when reading the Server Info file")
+    
+    server_bids_path = map_path(bids_path, server_info['shared_folders'])
+    if server_bids_path == None:
+        raise PathMappingError("Problems when mapping the local Shared folder path to the remote server path")
+    
+    if isinstance(job_json, list):
+        job_info = job_json
+    elif isinstance(job_json, str):
+        job_info = get_job_info(job_json)
+        if job_info == None:
+            raise JobInfoError("Problems when reading the Job Info file")
+    else:
+        raise JobInfoError("Problems when reading the Job Info file")
+                
+    # check if arg is a loca path and map if needed 
+    # !!! Attention: Not Optimal !!!
+    args_path = []
+    for arg_l in args:
+        arg_l_path = []
+        for arg in arg_l:
+            if pexists(arg):
+                arg_map = map_path(arg, server_info['shared_folders'])
+                arg_l_path.append(arg_map)
+            else:
+                arg_l_path.append(arg)
+        args_path.append(arg_l_path)
+    args = args_path
+    
+    if one_job:
+        subjects_and_sessions = (sub, ses)
+    else:
+        subjects_and_sessions = find_subjects_and_sessions(bids_path, sub, ses, check_if_exist=check_if_exist)
+    # print(subjects_and_sessions)
+                
+    # Try the connection
+    try:
+        if use_asyncssh:
+            jobs_submitted = asyncio.run(asyncssh_submit_job_compose(server_bids_path, subjects_and_sessions, server_info, job_info, args, passphrase=passphrase, one_job=one_job))
+            
+        else:
+            return []
+            # jobs_submitted = asyncio.run(paramiko_submit_job(server_bids_path, subjects_and_sessions, server_info, job_info, args))
+            
+        return jobs_submitted
+    
+    except JobSubmissionError as e:
+        print(f'JobSubmissionError: {e}')
+        raise JobSubmissionError(e)
+    except Exception as e:
+        print('Exception')
+        raise ServerConnectionError(f"Server Connection error: {e}")
 
 
 
@@ -309,13 +376,13 @@ async def asyncssh_submit_job(server_bids_path, subjects_and_sessions, server_in
     
     job_submitted = []
     if one_job:
-        # print('one job')
+        print('one job')
         sub = subjects_and_sessions[0]
         ses = subjects_and_sessions[1]
-        # print(sub, ses)
+        print(sub, ses)
         try:
             # print('try')
-            sbatch_cmd = sbatch_command(server_bids_path, sub, ses, job_info, args=args)
+            sbatch_cmd = sbatch_command(server_bids_path, sub, ses, job_info, args=args, one_job=one_job)
             
             print(sbatch_cmd)
             
@@ -329,14 +396,19 @@ async def asyncssh_submit_job(server_bids_path, subjects_and_sessions, server_in
             job_submitted.append(output)
             
         except Exception as e:
-            raise JobSubmissionError(f"Error {e} while submiting a job")
-        
-        finally:
             # close connection
+            print(f'except {e}')
             ssh.close()
             await ssh.wait_closed()
             print('connection closed ')
             return job_submitted
+            raise JobSubmissionError(f"Error {e} while submiting a job")
+        
+        # close connection
+        ssh.close()
+        await ssh.wait_closed()
+        print('connection closed ')
+        
     else:
         print(subjects_and_sessions)
         for sub, sess in subjects_and_sessions:
@@ -344,7 +416,7 @@ async def asyncssh_submit_job(server_bids_path, subjects_and_sessions, server_in
                 print(sub, ses)
                 
                 try:
-                    sbatch_cmd = sbatch_command(server_bids_path, sub, ses, job_info, args=args)
+                    sbatch_cmd = sbatch_command(server_bids_path, sub, ses, job_info, args=args, one_job=one_job)
                     
                     print(sbatch_cmd)
                     
@@ -356,6 +428,124 @@ async def asyncssh_submit_job(server_bids_path, subjects_and_sessions, server_in
                     print(error)
                     
                     job_submitted.append(output)
+                    
+                except Exception as e:
+                    # close connection
+                    print(f'except {e}')
+                    ssh.close()
+                    await ssh.wait_closed()
+                    print('connection closed ')
+                    return job_submitted
+                    raise JobSubmissionError(f"Error {e} while submiting a job")
+                
+        # close connection
+        ssh.close()
+        await ssh.wait_closed()
+        print('connection closed ')        
+    return job_submitted
+
+
+
+async def asyncssh_submit_job_compose(server_bids_path, subjects_and_sessions, server_info, job_info, args=[], passphrase=None, one_job=False):
+    print('async_submit_job_compose')
+    # SSH connection setup
+    # Connect to SSH server
+    ssh = await connect_to_ssh(server_info["server"]["host"], server_info["server"]["user"], server_info["server"]["key"], passphrase=passphrase)
+    if not ssh:
+        raise ServerConnectionError("Problem during connection to the server")
+        
+    if type(job_info) != list:
+        raise TypeError("job_info is not a list")
+        
+    if len(job_info) != len(args):
+        print(f'{job_info=}')
+        print(f'{args=}')
+        raise IndexError("job_info list not the same size as args list")
+    
+    job_submitted = []
+    if one_job:
+        print('one job')
+        sub = subjects_and_sessions[0]
+        ses = subjects_and_sessions[1]
+        print(sub, ses)
+        try:
+            last_job_id = None
+            for i in range(len(job_info)):
+                
+                if last_job_id != None:
+                    print(f'compose with last job_id: {last_job_id}')
+                    job_info[i]["slurm_infos"]["dependency"] = f'afterok:{last_job_id}'
+                
+                # print('try')
+                sbatch_cmd = sbatch_command(server_bids_path, sub, ses, job_info[i], args=args[i], one_job=one_job)
+                
+                print(sbatch_cmd)
+                
+                # Run command on SSH server
+                result = await run_ssh_command(ssh, f'bash -l -c \"{sbatch_cmd}\"')
+                output = result.stdout
+                error = result.stderr
+                print(output)
+                print(error)
+                
+                if output is not None and output != []:
+                    if type(output) is list:
+                        job = output[0]
+                    else:
+                        job = output
+                
+                last_job_id = job.split(' ')[-1].replace('\n', '')
+                
+                job_submitted.append(output)
+            
+        except Exception as e:
+            # close connection
+            print(f'except {e}')
+            ssh.close()
+            await ssh.wait_closed()
+            print('connection closed ')
+            return job_submitted
+            raise JobSubmissionError(f"Error {e} while submiting a job")
+        
+        # close connection
+        ssh.close()
+        await ssh.wait_closed()
+        print('connection closed ')
+        
+    else:
+        print(subjects_and_sessions)
+        for sub, sess in subjects_and_sessions:
+            for ses in sess:
+                print(sub, ses)
+                
+                try:
+                    last_job_id = None
+                    for i in range(len(job_info)):
+                        
+                        if last_job_id != None:
+                            print(f'compose with last job_id: {last_job_id}')
+                            job_info[i]["slurm_infos"]["dependency"] = f'afterok:{last_job_id}'
+                            
+                        sbatch_cmd = sbatch_command(server_bids_path, sub, ses, job_info[i], args=args[i], one_job=one_job)
+                        
+                        print(sbatch_cmd)
+                        
+                        # Run command on SSH server
+                        result = await run_ssh_command(ssh, f'bash -l -c \"{sbatch_cmd}\"')
+                        output = result.stdout
+                        error = result.stderr
+                        print(output)
+                        print(error)
+                        
+                        if output is not None and output != []:
+                            if type(output) is list:
+                                job = output[0]
+                            else:
+                                job = output
+                        
+                        last_job_id = job.split(' ')[-1].replace('\n', '')
+                        
+                        job_submitted.append(output)
                     
                 except Exception as e:
                     # close connection
