@@ -974,7 +974,8 @@ class AddNewPipelinesWindow(QMainWindow):
             repo_widget = GitHubRepositoryWidget(self, repo)
             repos_widget.append(repo_widget)
         
-        layout = QVBoxLayout()
+        container_widget = QWidget()
+        layout = QVBoxLayout(container_widget)
         for repo in repos_widget:
             layout.addWidget(repo)
             
@@ -986,7 +987,7 @@ class AddNewPipelinesWindow(QMainWindow):
         scroll_area.setAutoFillBackground(True)
         scroll_area.setBackgroundRole(QPalette.Base)
         
-        scroll_area.setLayout(layout)
+        scroll_area.setWidget(container_widget)
         
         self.setCentralWidget(scroll_area)
         
