@@ -16,7 +16,7 @@ from os.path import join as pjoin
 from os.path import exists as pexists
 import sys
 import subprocess
-import time
+# import time
 import json
 
 
@@ -978,7 +978,7 @@ rm {job_sh_path}
     
     shell.send(f'{sbatch_command} \n')
     
-    time.sleep(1)
+    # time.sleep(1)
     
     while True:
         if shell.recv_ready():

@@ -9,7 +9,7 @@ BIDS MANAGER GUI
 
 # import output_redirection_tools # KEEP ME !!!
 
-import time
+# import time
 import sys
 import os
 from os.path import join as pjoin
