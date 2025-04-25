@@ -402,7 +402,7 @@ async def asyncssh_submit_job(server_bids_path, subjects_and_sessions, server_in
             await ssh.wait_closed()
             print('connection closed ')
             return job_submitted
-            raise JobSubmissionError(f"Error {e} while submiting a job")
+            raise JobSubmissionError(f"Error {e} while submitting a job")
         
         # close connection
         ssh.close()
@@ -436,7 +436,7 @@ async def asyncssh_submit_job(server_bids_path, subjects_and_sessions, server_in
                     await ssh.wait_closed()
                     print('connection closed ')
                     return job_submitted
-                    raise JobSubmissionError(f"Error {e} while submiting a job")
+                    raise JobSubmissionError(f"Error {e} while submitting a job")
                 
         # close connection
         ssh.close()
@@ -505,7 +505,7 @@ async def asyncssh_submit_job_compose(server_bids_path, subjects_and_sessions, s
             await ssh.wait_closed()
             print('connection closed ')
             return job_submitted
-            raise JobSubmissionError(f"Error {e} while submiting a job")
+            raise JobSubmissionError(f"Error {e} while submitting a job")
         
         # close connection
         ssh.close()
@@ -554,7 +554,7 @@ async def asyncssh_submit_job_compose(server_bids_path, subjects_and_sessions, s
                     await ssh.wait_closed()
                     print('connection closed ')
                     return job_submitted
-                    raise JobSubmissionError(f"Error {e} while submiting a job")
+                    raise JobSubmissionError(f"Error {e} while submitting a job")
                 
         # close connection
         ssh.close()
@@ -602,7 +602,7 @@ async def paramiko_submit_job(server_bids_path, subjects_and_sessions, server_in
                 job_submitted.append(output)
                 
             except Exception as e:
-                raise JobSubmissionError(f"Error {e} while submiting a job")
+                raise JobSubmissionError(f"Error {e} while submitting a job")
     
     # close connection
     ssh.close()
@@ -750,7 +750,7 @@ def old_paramiko_submit_job(bids_path, sub, ses, job_json, args=[]):
                     job_submitted.append(output)
                     
                 except Exception as e:
-                    raise JobSubmissionError(f"Error {e} while submiting a job")
+                    raise JobSubmissionError(f"Error {e} while submitting a job")
         
         # close connection
         ssh.close()
@@ -904,7 +904,7 @@ def old_submit_job(bids_path, sub, ses, modality, img):
     # Connect to the remote cluster
     ssh.connect(ssh_host, username=ssh_user, key_filename=ssh_private_key_path)
     
-    # Create the Ouput directory
+    # Create the Output directory
     sub_ses_den = pjoin(bids_path, 'derivatives', 'Denoise', f'sub-{sub}', f'ses-{ses}') 
     if not pexists(sub_ses_den):
         os.makedirs(sub_ses_den)

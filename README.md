@@ -4,7 +4,7 @@
 
 The BMAT software is a complete and easy-to-use local open-source neuroimaging analysis tool with a graphical user interface (GUI) that uses the BIDS format to organize and process brain MRI data for MS imaging research studies. BMAT provides the possibility to translate data from MRI scanners to the BIDS structure, create and manage BIDS datasets as well as develop and run automated processing pipelines. 
 
-BMAT is now compatible to work with remote server using shared samba folder and a slurm scheduler to process data on remote server. It has to be noted that this feature has been implemented for users based in the Institute of NeuroSciences (IoNS) from UCLouvain. Therefore, it may not work easily with every servers, but feel free to fork the code and adapt it for your institue.
+BMAT is now compatible to work with remote server using shared samba folder and a slurm scheduler to process data on remote server. It has to be noted that this feature has been implemented for users based in the Institute of NeuroSciences (IoNS) from UCLouvain. Therefore, it may not work easily with every servers, but feel free to fork the code and adapt it for your institute.
 
 ## Table of Contents
 
@@ -63,7 +63,7 @@ tar -xcvf BMAT.tar.gz
 
 - MacOS: Unfortunately, due to the difficulty to develop and compile application on MacOS, BMAT is not available as a compiled application on MacOS. For Mac users, the only possibility is to download BMAT from source code (cf. [Install from source code](#installation-from-source-code))
 
-BMAT has a few dependencies to work properly, i.e. Git, Docker, ITK-SNAP. You will find below the description on how to install each depedencies.
+BMAT has a few dependencies to work properly, i.e. Git, Docker, ITK-SNAP. You will find below the description on how to install each dependencies.
 
 ### Dependencies
 
@@ -104,9 +104,9 @@ A test DICOM MRI session of a healthy subject is available for download with thi
 
 ### Open/Create new BIDS
 
-When opening the software, a first window pops up and asks to select a BIDS dataset to launch BMAT. The user can either select a folder correponding to a BIDS dataset or create/select an empty folder to create a new BIDS dataset. 
+When opening the software, a first window pops up and asks to select a BIDS dataset to launch BMAT. The user can either select a folder corresponding to a BIDS dataset or create/select an empty folder to create a new BIDS dataset. 
 
-![Openning Window](/Readme_Pictures/SelectBIDS.png)
+![Opening Window](/Readme_Pictures/SelectBIDS.png)
 
 ### Main Window 
 
@@ -164,7 +164,7 @@ This feeature allows the user to rename subject sessions or sequences in the dat
 This menu contains some more features to manage the BIDS dataset. Here is a description of the different features:
 * Create BIDS directory: this will open a similar window to the first one for the user to create a new empty folder to select and create a new empty BIDS dataset.
 * Change BIDS directory: this will open a similar window to the first one for the user to select a new folder corresponding to a new BIDS dataset.
-* BIDS Quality Control: this will run a *bids-validator* program that will give the user informations about the validity of his BIDS dataset according to the BIDS specifications as well as give a link towards the BIDS specifications
+* BIDS Quality Control: this will run a *bids-validator* program that will give the user information about the validity of his BIDS dataset according to the BIDS specifications as well as give a link towards the BIDS specifications
 * Update Dataset Description: allows the user to update the name of the authors of the BIDS dataset. 
 
 ### Pipelines Menu
@@ -196,13 +196,13 @@ BMAT allows the user to add his own pipelines to the software to run specific in
 * “source_code”: the name of the python file containing the source code for the graphical interface of the pipeline. This file needs to be implemented using PyQt5 python module and contain a launch function, that takes the Main Window of the software as only argument, and that launches the graphical interface of the Pipeline. User can take the Template pipeline as an example.
 * “import_name”: the name of the corresponding module that needs to be imported in python. It corresponds to the name of the python source code file without the ‘.py’ extension.
 * “attr”: the name of the attribute of the imported ‘Pipelines’ python module corresponding to the python source code of the pipeline. Again, this corresponds to the name of the python source code file without the ‘.py’ extension. 
-* "add_info": this contains a dictionnary containing some specific information that the pipeline needs to run (e.g. the name of a sequence to use). 
+* "add_info": this contains a dictionary containing some specific information that the pipeline needs to run (e.g. the name of a sequence to use). 
     
 The implementation of the computation part of the pipeline can use docker container or can be implemented locally, allowing adaptability of the software to a wide range of Neuroimaging applications.
 
 ## Server compatibility (UCLouvain/IoNS)
 
-Speicific for UCLouvain/IoNS members, BMAT was implemented with a possibilities to connect to the remote SSS server to access and process your data on the server. 
+Specific for UCLouvain/IoNS members, BMAT was implemented with a possibilities to connect to the remote SSS server to access and process your data on the server. 
 
 1. First, make sure to have a SSH access to the server
 
@@ -213,7 +213,7 @@ Speicific for UCLouvain/IoNS members, BMAT was implemented with a possibilities 
         * "key": path towards your ssh key do connect to the server
     * "shared_folders": list of all the connected shared samba folders on your system. This allows the program to map folder/files path on your computer to their location on the server
 
-3. Update all pipeline option file (pipeline.json) to allow running pipelines on the server via the slurm scheduler. For that, in the pipeline.json file, make sure that there is a "sss_slurm" tag in the add_info dictionnary that points towards another json file contaitning the slurm job infos (script to run, environment, modules, job ressources, etc.)
+3. Update all pipeline option file (pipeline.json) to allow running pipelines on the server via the slurm scheduler. For that, in the pipeline.json file, make sure that there is a "sss_slurm" tag in the add_info dictionary that points towards another json file contaitning the slurm job infos (script to run, environment, modules, job resources, etc.)
 
 ## Installation from source code
 
@@ -225,7 +225,7 @@ Firstly, this section presents the different dependencies that need to be instal
 
 #### Python 
 
-This software is written entirely in Python and thus requires Python to be installed to work properly. Pip is also needed to install the different packages that the software requires. Pip can sometimes be installed additionnaly when installing Python but not in every case, so it needs to be verified. The installation will be described for the different possible OS.
+This software is written entirely in Python and thus requires Python to be installed to work properly. Pip is also needed to install the different packages that the software requires. Pip can sometimes be installed additionally when installing Python but not in every case, so it needs to be verified. The installation will be described for the different possible OS.
 
 ⚠️ **Python version should be >= 3.8** ⚠️
 
@@ -277,7 +277,7 @@ to see the version of python and
 pip -V
 ```
 
-to see the verison of pip.
+to see the version of pip.
 
 If there is no error, move on. 
 

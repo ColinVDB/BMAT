@@ -176,8 +176,8 @@ def dcm2bids(bids_path, sub, ses, dicom, unzip=False, seq_f='/storage/platform/i
     
     convert_f = pjoin('/tmp', f'BMAT_{bids_name}_dcm2bids_{job_id}')
     if pexists(convert_f):
-        print('[ERROR] convert foler already exists')
-        raise FileExistsError('[ERROR] convert foler already exists')
+        print('[ERROR] convert folder already exists')
+        raise FileExistsError('[ERROR] convert folder already exists')
     else:
         os.makedirs(convert_f)
         
@@ -251,7 +251,7 @@ if __name__ == '__main__':
     
     help_message = '''
 dcm2bids_job        
-    Automatic script to convert DICOM into a bids databse via a slurm job
+    Automatic script to convert DICOM into a bids database via a slurm job
     
 use:
     python dcm2bids.py bids_path sub ses dicom_folder [options]
@@ -269,10 +269,10 @@ Compulsory arguments:
 Optional arguments:     
 
     -z or --unzip:
-        used if the dicom_folder is in a .zip format to unzip it before doing the convertion
+        used if the dicom_folder is in a .zip format to unzip it before doing the conversion
         
     -seq or --sequences seq:
-        seq: path towards the seqences.csv file to use for renaming of the sequences
+        seq: path towards the sequences.csv file to use for renaming of the sequences
             default: nima/BMAT/sequences.csv
     
     -iso or --iso-format:
