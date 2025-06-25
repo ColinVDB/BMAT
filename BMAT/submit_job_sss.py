@@ -183,11 +183,11 @@ def sbatch_command(bids, sub, ses, job_info, args=[], one_job=False):
     # add error and output in job_info
     slurm_infos = job_info["slurm_infos"]
     if one_job:
-        slurm_infos["output"] = pjoin(job_info["log"], f"slurm-%j_{slurm_infos['job-name']}_one_job.out")
-        slurm_infos["error"] = pjoin(job_info["log"], f"slurm-%j_{slurm_infos['job-name']}_one_job.err")
+        slurm_infos["output"] = pjoin(job_info["log"], f"slurm-%j_{slurm_infos['job-name']}_one_job.out").replace('\\','/')
+        slurm_infos["error"] = pjoin(job_info["log"], f"slurm-%j_{slurm_infos['job-name']}_one_job.err").replace('\\','/')
     else:
-        slurm_infos["output"] = pjoin(job_info["log"], f"slurm-%j_{slurm_infos['job-name']}_sub-{sub}_ses-{ses}.out")
-        slurm_infos["error"] = pjoin(job_info["log"], f"slurm-%j_{slurm_infos['job-name']}_sub-{sub}_ses-{ses}.err")
+        slurm_infos["output"] = pjoin(job_info["log"], f"slurm-%j_{slurm_infos['job-name']}_sub-{sub}_ses-{ses}.out").replace('\\','/')
+        slurm_infos["error"] = pjoin(job_info["log"], f"slurm-%j_{slurm_infos['job-name']}_sub-{sub}_ses-{ses}.err").replace('\\','/')
     
     # Create sbatch command
     sbatch_cmd = "sbatch "
@@ -206,7 +206,7 @@ def sbatch_command(bids, sub, ses, job_info, args=[], one_job=False):
     venv = ""
     if job_info["venv"] != None:
         venv = job_info["venv"]
-    if venv != "" or venv != None:
+    if not (venv == "" or venv == None):
         wrap_cmd = wrap_cmd + f"source {venv} ; "
     # adding actual cmd
     job_arg = []

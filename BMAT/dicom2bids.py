@@ -301,7 +301,7 @@ class BIDSHandler:
                 # self.client.containers.run('xnat/dcm2niix', auto_remove=True, volumes={f'{path}':{'bind':'/media', 'mode':'ro'}, f'{directory}':{'bind':'/mnt', 'mode':'rw'}}, command=['dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /mnt /media'])
                 # subprocess.Popen(f'dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o {directory} {path}', shell=True).wait()
                 if self.dcm2niix_path:
-                    subprocess.Popen(f'{self.dcm2niix_path} -f \"%d_%p_%t_%s\" -p y -z y -o {directory} {path}', shell=True).wait()
+                    subprocess.Popen(f'{self.dcm2niix_path} -f \"%d_%p_%t_%s\" -p y -z y -o {directory} "{path}"', shell=True).wait()
                 else:
                     print('Use docker for conversion')
                     subprocess.Popen(f'docker run --rm --privileged -v "{directory}":/home -v "{path}":/media colinvdb/bmat-dcm2niix dcm2niix -f \"%d_%p_%t_%s\" -p y -z y -o /home /media', shell=True).wait()
