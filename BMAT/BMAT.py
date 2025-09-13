@@ -1410,7 +1410,7 @@ class BIDSQualityControlWindow(QMainWindow):
         self.bids = self.parent.bids
         # self.threads_pool = self.parent.threads_pool
 
-        self.setWindowTitle("BIDS Quality Controler")
+        self.setWindowTitle("BIDS Quality Controller")
 
         self.title = QLabel('BIDS Quality Controler')
         self.title.setFont(QFont('Calibri', 30))
@@ -3772,7 +3772,7 @@ class UpdateDatasetDescription_RecommendedTab(QWidget):
         self.dataset_type_cb.addItems(["raw", "derivatives"])
         self.dataset_type_cb.currentIndexChanged.connect(self.update_dataset_type)        
         
-        license_lab = QLabel('The license for the dataset. The use of license name abbreviations is RECOMMENDED for specifying a license (see BIDS secification). The corresponding full license text MAY be specified in an additional LICENSE file.')
+        license_lab = QLabel('The license for the dataset. The use of license name abbreviations is RECOMMENDED for specifying a license (see BIDS specification). The corresponding full license text MAY be specified in an additional LICENSE file.')
         license_lab.setWordWrap(True)
         self.license = QLineEdit(self)
         if self.dataset_description.get('License') == None or self.dataset_description.get('License') == '':     
@@ -4164,7 +4164,7 @@ class SourceDatasetWidget(QWidget):
         
 
 # =============================================================================
-# UpdateDatasetDescription Optinal Tab
+# UpdateDatasetDescription Optional Tab
 # =============================================================================
 class UpdateDatasetDescription_OptionalTab(QWidget):
     """

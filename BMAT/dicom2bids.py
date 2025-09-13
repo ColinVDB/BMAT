@@ -1331,7 +1331,7 @@ class BIDSHandler:
         #     for tag in tags:
         #         if tag[0] not in participants_tsv.keys():
         #             participants_tsv[tag[0]] = {}
-        #         # update dicionary with the date of the new session
+        #         # update dictionary with the date of the new session
         #         if results[i] != None and results[i] != '':
         #             participants_tsv[tag[0]][key_num] = results[i]
         #         else:
